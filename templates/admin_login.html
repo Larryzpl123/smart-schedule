@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+{% block body %}
+<h1>Admin login</h1>
+<form method="post">
+  <label>Admin password</label>
+  <input name="password" type="password" required>
+  <button type="submit">Enter</button>
+</form>
+{% endblock %}

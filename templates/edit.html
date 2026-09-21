@@ -1,0 +1,1311 @@
+{% extends "base.html" %}
+{% block title %}Edit schedule{% endblock %}
+{% block cardclass %}wide{% endblock %}
+{% block body %}
+<h1>Edit my schedule</h1>
+
+<div style="display:flex;gap:.5rem;margin-bottom:1rem">
+  <button type="button" id="modeForm" class="modebtn on" style="width:auto;margin:0">Form</button>
+  <button type="button" id="modeText" class="modebtn" style="width:auto;margin:0;background:var(--panel2);color:var(--ink)">Text</button>
+  <span style="flex:1"></span>
+  <span class="hint" style="margin:0;font-size:.72rem">{% if local %}Local mode: this stays in this browser. Nothing is sent to us.{% else %}Your schedule is yours. Nobody else can open it.{% endif %}</span>
+</div>
+
+<div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
+  <button type="button" class="filebtn" id="pdfBtn"
+          style="background:var(--accent);color:#0d0f14;border-color:var(--accent);font-weight:600">
+    ⚡ Import my Veracross PDF</button>
+  <input type="file" id="pdfFile" accept=".pdf,application/pdf" style="display:none">
+  {% if local %}
+  <button type="button" class="filebtn" id="dlBtn">⭳ Download (.txt)</button>
+  {% else %}
+  <a class="btn filebtn" href="{{ url_for('edit_export') }}">⭳ Download (.txt)</a>
+  {% endif %}
+  <button type="button" class="filebtn" id="importBtn">⭱ Load .txt</button>
+  <input type="file" id="importFile" accept=".txt,text/plain" style="display:none">
+  <!-- Its own <form>: this one posts a file to the server and comes back with
+       a page of tick boxes, rather than filling this editor in. Deadlines from
+       somebody else's calendar want looking at before they land. -->
+  <form method="post" action="{% if local %}/api/parse-ics{% else %}{{ url_for('edit_import_ics') }}{% endif %}"
+        enctype="multipart/form-data" id="icsForm"
+        style="display:flex;gap:.35rem;align-items:center;margin:0">
+    <button type="button" class="filebtn" id="icsBtn">📅 Import a calendar (.ics)</button>
+    <input type="file" name="ics" id="icsFile" accept=".ics,text/calendar" style="display:none">
+    <select name="color" id="icsColor" title="Colour for everything imported"
+            style="font-size:.72rem;padding:.3rem;width:auto;margin:0"></select>
+  </form>
+  <span class="hint" id="importStatus" style="margin:0;flex:1;min-width:180px">
+    The PDF and .txt imports only fill this page in. Nothing is saved until
+    you press Save. A calendar import is ticked off and confirmed{% if local %} right
+    here{% else %} on its own page{% endif %}.</span>
+</div>
+{% if local %}
+<!-- The account flow parks the upload in a temp file so a second page can diff
+     it against what you already have. There is nothing on the server to park
+     here, so the list lives in this page and dies with it. -->
+<div id="icsBox" style="display:none;margin-bottom:1rem;background:var(--panel2);
+     border:1px solid var(--line);border-radius:8px;padding:.7rem;font-size:.76rem"></div>
+{% endif %}
+{% if not local %}
+<div style="margin-bottom:1rem">
+  <button type="button" class="filebtn" id="histBtn"
+          style="width:auto;margin:0">↺ Earlier versions</button>
+  <span class="hint" style="margin:0;font-size:.72rem">
+    Kept automatically every time your schedule changes. Loading one fills
+    this page in; nothing is saved until you press Save.</span>
+  <div id="histBox" style="display:none;margin-top:.6rem;background:var(--panel2);
+       border:1px solid var(--line);border-radius:8px;padding:.6rem;font-size:.76rem"></div>
+</div>
+{% else %}
+<div class="hint" style="margin-bottom:1rem;line-height:1.6">
+  There is no version history in local mode. Keeping old copies would mean
+  keeping them somewhere, and the whole point is that nothing leaves this
+  browser. Use <b>Download (.txt)</b>, or the ⛁ Backup button on the schedule
+  page, before you make a big change.</div>
+{% endif %}
+
+<div id="pdfWarn" class="flash error" style="display:none;margin-bottom:1rem;font-size:.75rem;line-height:1.6"></div>
+<div id="pdfNote" style="display:none;margin-bottom:1rem;font-size:.75rem;line-height:1.6;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.7rem;color:var(--ink-dim)"></div>
+
+<form method="post" id="schedForm">
+  <input type="hidden" name="schedule_text" id="schedule_text">
+
+  <div id="formPane">
+    <label>Your name</label>
+    <input id="f_name" placeholder="Jane Doe">
+    <label>Grade / form line</label>
+    <input id="f_form" placeholder="27 - Junior">
+
+    <div id="terms"></div>
+    <button type="button" id="addTerm" style="background:var(--panel2);color:var(--ink);margin-top:.6rem">+ Add a term (semester)</button>
+
+    <label style="margin-top:1rem">Sports <span class="hint" style="display:inline;margin:0">(one row per season. They are not tied to a semester, so fall, winter and spring all fit. Max {{ caps.sports }}.)</span></label>
+    <div id="sportRows"></div>
+    <button type="button" id="addSport" style="background:var(--panel2);color:var(--ink);margin-top:.4rem;width:auto;padding:.4rem .8rem;font-size:.78rem">+ Add a sport</button>
+
+    <label style="margin-top:1rem">Projects <span class="hint" style="display:inline;margin:0">(a long piece of work with a start and an end: a term paper, a competition build. The pieces due along the way go in <b>Homework</b> below and get attached to it. Max {{ caps.projects }}.)</span></label>
+    <div id="projRows"></div>
+    <button type="button" id="addProj" style="background:var(--panel2);color:var(--ink);margin-top:.4rem;width:auto;padding:.4rem .8rem;font-size:.78rem">+ Add a project</button>
+
+    <label style="margin-top:1rem">My events <span class="hint" style="display:inline;margin:0">(things that aren't classes: a teacher meeting, piano, a club. Max {{ caps.events }}.)</span></label>
+    <datalist id="durList"></datalist>
+    <div id="eventRows"></div>
+    <button type="button" id="addEvent" style="background:var(--panel2);color:var(--ink);margin-top:.4rem;width:auto;padding:.4rem .8rem;font-size:.78rem">+ Add an event</button>
+
+    <label style="margin-top:1rem">Homework <span class="hint" style="display:inline;margin:0">(hung on a class, so it follows that class around the rotation. Max {{ caps.hw }}.)</span></label>
+    <div id="hwRows"></div>
+    <button type="button" id="addHw" style="background:var(--panel2);color:var(--ink);margin-top:.4rem;width:auto;padding:.4rem .8rem;font-size:.78rem">+ Add homework</button>
+    <div class="hint" id="capWarn" style="color:var(--bad);display:none"></div>
+
+    <label style="margin-top:1rem">Time format</label>
+    <select id="f_timefmt" style="width:auto">
+      <option value="12h">12-hour</option>
+      <option value="24h">24-hour</option>
+    </select>
+  </div>
+
+  <div id="textPane" style="display:none">
+    <div style="display:flex;gap:1rem;flex-wrap:wrap">
+      <div style="flex:1;min-width:300px">
+        <label>Raw schedule text</label>
+        <textarea id="rawText" spellcheck="false" style="min-height:420px"></textarea>
+      </div>
+      <div style="flex:1;min-width:280px;font-size:.74rem;color:var(--ink-dim);line-height:1.6">
+        <label>Format rules</label>
+        <div style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.7rem">
+          <b style="color:var(--ink)">Line 1</b> = your name<br>
+          <b style="color:var(--ink)">Line 2</b> = grade, e.g. <code>27 - Junior</code><br><br>
+          <b style="color:var(--ink)">Each semester</b> starts with:<br>
+          <code>@term Fall 2025 = 08.26-01.16</code><br>
+          (label = MM.DD-MM.DD date range)<br><br>
+          <b style="color:var(--ink)">Class lines</b> (period A-H):<br>
+          <code>A - Name - Num - Sec - Teacher - Room - color</code><br>
+          colors: red green blue yellow purple teal orange pink gray indigo cyan<br>
+          Shady Side colours by department, and a PDF import uses those:
+          <b>Math</b> red, <b>Science</b> green, <b>English</b> blue,
+          <b>History</b> yellow, <b>World Language</b> purple,
+          <b>Computer Science</b> orange, <b>Art</b> cyan, <b>Music</b> teal.<br><br>
+          <b style="color:var(--ink)">Two optional extras</b> on a class line, any order:<br>
+          <code>- La</code> or <code>- Ea</code>: which lunch track. Only changes
+          the midday class; your PDF says which.<br>
+          <code>- days 2,6</code>: only meets on those rotation days. Use it for a
+          lab that borrows an otherwise-free period.<br>
+          <code>A - Physics 2 - PY430 - 1 - Ms. Rivera - MC 210 - blue - La - days 2,6</code><br><br>
+          <b style="color:var(--ink)">Your own events</b> (max {{ caps.events }}), any of:<br>
+          <code>@event 2026-09-10 - Meet Mr. B - 11:50-12:40 - gray</code><br>
+          <code>@event Mon,Wed - Piano - 16:00-17:00 - 09.01-12.20 - pink</code><br>
+          <code>@event monthly Thu#1 - Form Meeting - 10:05-10:30 - pink</code>
+          (<code>Thu#1</code> = first Thursday, <code>Thu#-1</code> = last, <code>monthly 15</code> = the 15th)<br>
+          <code>@event every 90 from 2026-09-07 - Renew hosting - 19:00-19:15 - gray</code>
+          — a fixed number of days from a date, for the things that fall on no
+          weekday and no day of the month.<br><br>
+          <b style="color:var(--ink)">Homework</b> (max {{ caps.hw }}) hangs on a class letter, not a time:<br>
+          <code>@hw A - before - Read ch.4 - 2026-09-10</code> (<code>before</code> or <code>during</code>)<br>
+          Two optional fields on the end: which project it belongs to, and
+          <code>done</code>:<br>
+          <code>@hw E - before - Prospectus - 2026-09-25 - US History Paper - done</code><br><br>
+          <b style="color:var(--ink)">Projects</b> (max 12) are long pieces of work.
+          They have no time of day, so they are drawn as a band across the days
+          they cover rather than as a block:<br>
+          <code>@project US History Paper - 2026-09-14 - 2027-01-15 - blue</code><br>
+          Progress is counted from the homework attached to it, never typed in.<br><br>
+          <b style="color:var(--ink)">Optional per term:</b><br>
+          <code>@immersive Your Move - IM327 - Mr. Lindqvist - MC 104 - indigo</code><br><br>
+          <b style="color:var(--ink)">Sports</b> (max 8) are not part of a term:
+          three seasons, two semesters, and winter crosses January, so each one
+          carries its own dates and they go above the first <code>@term</code>:<br>
+          <code>@sport Swimming - Mon,Thu - 15:45-17:15 - 11.16-02.20 - cyan</code><br>
+          The <code>MM.DD-MM.DD</code> season is optional; leave it out and it
+          runs all year.<br><br>
+          <b style="color:var(--ink)">Preferences</b> (once, at the end):<br>
+          <code>@pref time_format = 12h</code><br><br>
+          <i>Rotation, community time, finals and the Wednesday schedule are
+          shared by the whole school, you don't add those.</i>
+        </div>
+        <label style="margin-top:.8rem">Example</label>
+        <pre id="exampleBox" style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.7rem;font-size:.7rem;white-space:pre-wrap;color:var(--ink)"></pre>
+      </div>
+    </div>
+  </div>
+
+  <button type="submit">Save</button>
+</form>
+
+<div class="links"><a href="{% if local %}/local/app{% else %}{{ url_for('app_view') }}{% endif %}">Back to schedule</a></div>
+
+<style>
+  .modebtn.on{background:var(--accent);color:#0d0f14}
+  .termcard{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:.9rem;margin-top:.8rem}
+  .termcard .row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+  .termcard .row input{flex:1;min-width:90px}
+  .periodrow,.periodhdr{display:grid;grid-template-columns:24px 1fr 78px 42px 1fr 74px 78px 52px 62px;gap:.3rem;margin-top:.35rem;align-items:center}
+  .periodrow .plabel{font-weight:600;color:var(--accent);text-align:center}
+  .periodrow input,.periodrow select{font-size:.74rem;padding:.4rem}
+  .small{font-size:.72rem;color:var(--ink-dim);margin:.6rem 0 .2rem}
+  .rmbtn{background:var(--bad);color:#fff;width:auto;margin:.5rem 0 0;padding:.4rem .7rem;font-size:.75rem}
+  .filebtn{width:auto;margin:0;padding:.5rem .9rem;font-size:.78rem;background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
+  .filebtn:hover{border-color:var(--accent);color:var(--accent)}
+</style>
+
+<script>
+const COLORS=["red","green","blue","yellow","purple","teal","orange","pink","gray","indigo","cyan"];
+const PERIODS=["A","B","C","D","E","F","G","H"];
+const SEMESTERS = {{ semesters|tojson }};  // [{year,term,from,to}]
+// quick lookups
+function semYears(){const s=new Set();SEMESTERS.forEach(x=>s.add(x.year));return [...s];}
+function semFind(year,term){return SEMESTERS.find(x=>x.year===year&&x.term===term);}
+function semByRange(from,to){return SEMESTERS.find(x=>x.from===from&&x.to===to);}
+const LOCAL = {{ 'true' if local else 'false' }};
+const LS_KEY = "ssa-local-schedule";     // the same key the schedule page uses
+/* Local mode renders with a blank user, so the server's copy is always "".
+   Reading localStorage here is the whole difference between the two modes:
+   everything below this line is the same editor. */
+const SAVED = LOCAL
+  ? (function(){ try{ return localStorage.getItem(LS_KEY) || ""; }
+                 catch(e){ return ""; } })()
+  : {{ (user['schedule_text'] or '')|tojson }};
+const MAX_BYTES = {{ caps.kb }} * 1024;
+const EXAMPLE = `Jane Doe
+27 - Junior
+
+@sport Cross Country - Mon,Tue,Wed,Thu,Fri - 15:45-17:15 - 08.25-11.05 - green
+@sport Swimming - Mon,Thu - 15:45-17:15 - 11.16-02.20 - cyan
+
+@term Fall 2026 = 08.25-01.15
+A - Physics 2 (Calc.) - PY430 - 1 - Ms. Rivera - MC 210 - green - La - days 2,6
+B - French 2 - FR200 - 1 - Mr. Okafor - C 8 - purple - Ea
+D - Robotics - CS301 - 1 - Ms. Patel - GH 015 - orange - Ea
+@immersive Your Move - IM327 - Mr. Bennett - MC 104 - indigo
+
+@pref time_format = 12h`;
+document.getElementById("exampleBox").textContent=EXAMPLE;
+
+function parse(text){
+  const model={name:"",form:"",timefmt:"12h",terms:[],sports:[],projects:[],events:[],hw:[]};
+  let cur=null, idx=0;
+  for(const raw of (text||"").split(/\r?\n/)){
+    const line=raw.trim();
+    if(!line||line.startsWith("#"))continue;
+    if(line.startsWith("@term")){const m=line.match(/^@term\s+(.*?)\s*=\s*([\d.]+)-([\d.]+)/);if(m){cur={label:m[1],from:m[2],to:m[3],classes:{},imm:"",sport:""};model.terms.push(cur);}continue;}
+    if(line.startsWith("@immersive")){if(cur)cur.imm=line.replace("@immersive","").trim();continue;}
+    /* Sports are per student, not per term: there are three seasons and only
+       two semesters, and winter crosses January. Old files wrote them inside
+       a @term block, so read them wherever they turn up. */
+    if(line.startsWith("@sport")){model.sports.push(line.replace("@sport","").trim());continue;}
+    if(line.startsWith("@project")){model.projects.push(line.replace("@project","").trim());continue;}
+    if(line.startsWith("@event")){model.events.push(line.replace("@event","").trim());continue;}
+    if(line.startsWith("@hw")){model.hw.push(line.replace("@hw","").trim());continue;}
+    if(line.startsWith("@pref")){const m=line.match(/time_format\s*=\s*(\w+)/);if(m)model.timefmt=m[1];continue;}
+    if(/^[A-H]\s*-/.test(line)){if(cur){const p=line[0];cur.classes[p]=line.slice(1).replace(/^\s*-\s*/,"");}continue;}
+    if(idx===0){model.name=line;idx++;continue;}
+    if(idx===1){model.form=line;idx++;continue;}
+  }
+  return model;
+}
+
+const termsEl=document.getElementById("terms");
+function addTermCard(t){
+  t=t||{label:"",from:"",to:"",classes:{},imm:""};
+  // figure out which year/term this saved term matches (by its date range, else label)
+  let match=semByRange(t.from,t.to);
+  let selYear = match? match.year : (semYears()[0]||"");
+  let selTerm = match? match.term : "Fall";
+  const card=document.createElement("div");card.className="termcard";
+  const yearOpts=semYears().map(y=>`<option ${y===selYear?"selected":""}>${y}</option>`).join("");
+  card.innerHTML=`
+    <div class="row">
+      <div>
+        <div class="small" style="margin:0 0 .2rem">School year</div>
+        <select class="t_year">${yearOpts}</select>
+      </div>
+      <div>
+        <div class="small" style="margin:0 0 .2rem">Semester</div>
+        <select class="t_term">
+          <option ${selTerm==="Fall"?"selected":""}>Fall</option>
+          <option ${selTerm==="Spring"?"selected":""}>Spring</option>
+        </select>
+      </div>
+      <div style="flex:1">
+        <div class="small" style="margin:0 0 .2rem">Dates (auto)</div>
+        <div class="t_dates" style="font-size:.78rem;color:var(--ink-dim);padding:.5rem 0"></div>
+      </div>
+    </div>
+    <div class="small">Classes (leave a period blank to skip it). <b>Lunch</b> = which
+      lunch track that class is on (from your PDF). <b>Days</b> = leave blank unless the
+      class only meets on some rotation days, like a lab: then put e.g. <code>2,6</code>.</div>
+    <div class="periodhdr" style="margin-bottom:.1rem;color:var(--ink-dim);font-size:.66rem">
+      <div></div><div>Class name</div><div>Num</div><div>Sec</div><div>Teacher</div>
+      <div>Room</div><div>Colour</div><div>Lunch</div><div>Days</div>
+    </div>
+    <div class="periods"></div>
+    <div class="small">Immersive course (optional)</div>
+    <div class="immrow"></div>
+    <button type="button" class="rmbtn">Remove this term</button>`;
+  // Immersive: same five fields as a class, so give it the same boxes rather
+  // than one string the student has to punctuate correctly.
+  const ip=(t.imm||"").split(" - ").map(x=>x.trim());
+  const imm=card.querySelector(".immrow");
+  imm.style.cssText="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center";
+  imm.appendChild(mkInput(ip[0]||"","Course name",true)).className="i_name";
+  imm.appendChild(mkInput(ip[1]||"","Num")).className="i_num";
+  imm.appendChild(mkInput(ip[2]||"","Teacher",true)).className="i_teacher";
+  imm.appendChild(mkInput(ip[3]||"","Room")).className="i_room";
+  imm.appendChild(mkSel(COLORS,ip[4]||"indigo","6rem")).className="i_color";
+  const pe=card.querySelector(".periods");
+  PERIODS.forEach(p=>{
+    const parts=(t.classes[p]||"").split(" - ");
+    const name=parts[0]||"",num=parts[1]||"",sec=parts[2]||"",teacher=parts[3]||"",room=parts[4]||"",color=parts[5]||"";
+    // Optional trailing fields, any order: "La"/"Ea" and "days 2,6".
+    let le="",days="";
+    parts.slice(6).forEach(x=>{
+      x=(x||"").trim();
+      if(/^(la|ea)$/i.test(x)) le=x[0].toUpperCase()+x.slice(1).toLowerCase();
+      else { const m=x.match(/^days\s+([\d,\s]+)$/i); if(m) days=m[1].replace(/\s+/g,""); }
+    });
+    const row=document.createElement("div");row.className="periodrow";
+    row.innerHTML=`<div class="plabel">${p}</div>
+      <input class="c_name" placeholder="Class name" value="${name}">
+      <input class="c_num" placeholder="Num" value="${num}">
+      <input class="c_sec" placeholder="Sec" value="${sec}">
+      <input class="c_teacher" placeholder="Teacher" value="${teacher}">
+      <input class="c_room" placeholder="Room" value="${room}">
+      <select class="c_color">${COLORS.map(c=>`<option ${c===color?"selected":""}>${c}</option>`).join("")}</select>
+      <select class="c_le"><option value=""${le?"":" selected"}>auto</option><option${le==="Ea"?" selected":""}>Ea</option><option${le==="La"?" selected":""}>La</option></select>
+      <input class="c_days" placeholder="2,6" value="${days}">`;
+    pe.appendChild(row);
+  });
+  // live-update the auto dates label
+  const yEl=card.querySelector(".t_year"), tEl=card.querySelector(".t_term"), dEl=card.querySelector(".t_dates");
+  function upd(){const s=semFind(yEl.value,tEl.value);dEl.textContent=s?`${s.from} - ${s.to}`:"(no dates set for this year/term)";}
+  yEl.onchange=upd; tEl.onchange=upd; upd();
+  card.querySelector(".rmbtn").onclick=()=>card.remove();
+  termsEl.appendChild(card);
+}
+document.getElementById("addTerm").onclick=()=>addTermCard();
+
+function formToText(){
+  const name=document.getElementById("f_name").value.trim();
+  const form=document.getElementById("f_form").value.trim();
+  const tf=document.getElementById("f_timefmt").value;
+  let out=[name, form, ""];
+  let anySport=false;
+  document.querySelectorAll("#sportRows .sprow").forEach(r=>{
+    const v=sportRowToText(r); if(v){out.push(`@sport ${v}`);anySport=true;}
+  });
+  document.querySelectorAll("#projRows .prrow").forEach(r=>{
+    const v=projRowToText(r); if(v){out.push(`@project ${v}`);anySport=true;}
+  });
+  if(anySport)out.push("");
+  document.querySelectorAll(".termcard").forEach(card=>{
+    const year=card.querySelector(".t_year").value;
+    const term=card.querySelector(".t_term").value;
+    const s=semFind(year,term);
+    if(!s)return;  // no date range defined, skip
+    // label like "Fall 2025": first year of the range for Fall, second for Spring
+    const yrs=year.split("-");
+    const labelYear = term==="Fall" ? yrs[0] : (yrs[1]||yrs[0]);
+    out.push(`@term ${term} ${labelYear} = ${s.from}-${s.to}`);
+    card.querySelectorAll(".periodrow").forEach(row=>{
+      const nm=row.querySelector(".c_name").value.trim();
+      if(!nm)return;
+      const p=row.querySelector(".plabel").textContent;
+      const num=row.querySelector(".c_num").value.trim();
+      const sec=row.querySelector(".c_sec").value.trim()||"1";
+      const teacher=row.querySelector(".c_teacher").value.trim();
+      const room=row.querySelector(".c_room").value.trim();
+      const color=row.querySelector(".c_color").value;
+      const le=row.querySelector(".c_le").value;
+      const days=row.querySelector(".c_days").value.trim().replace(/\s+/g,"");
+      let out1=`${p} - ${nm} - ${num} - ${sec} - ${teacher} - ${room} - ${color}`;
+      if(le) out1 += ` - ${le}`;
+      if(days) out1 += ` - days ${days}`;
+      out.push(out1);
+    });
+    const iq=c=>card.querySelector(c).value.trim();
+    if(iq(".i_name"))
+      out.push(`@immersive ${iq(".i_name")} - ${iq(".i_num")} - ${iq(".i_teacher")}`
+               + ` - ${iq(".i_room")} - ${card.querySelector(".i_color").value}`);
+    out.push("");
+  });
+  document.querySelectorAll("#eventRows .evrow").forEach(r=>{
+    const v=eventRowToText(r); if(v)out.push(`@event ${v}`);
+  });
+  document.querySelectorAll("#hwRows .hwrow").forEach(r=>{
+    const v=hwRowToText(r); if(v)out.push(`@hw ${v}`);
+  });
+  if(out[out.length-1]!=="")out.push("");
+  out.push(`@pref time_format = ${tf}`);
+  return out.join("\n");
+}
+
+/* --- events + homework rows (plain one-line inputs; the format is short
+       enough that a row of separate boxes would be more fiddly, not less) --- */
+/* Straight from the server, never a second copy: MAX_HW went to 60 when
+   project milestones arrived and this file still said 20, so the form refused
+   the 21st milestone that the server would happily have taken. */
+const MAX_EVENTS={{ caps.events }}, MAX_HW={{ caps.hw }};
+
+/* Events and homework used to be typed as raw text, which nobody wants to do.
+   These build the same lines out of dropdowns instead. Anything that does not
+   fit the pickers (someone hand-wrote an odd line in Text mode) falls back to a
+   plain text box for that row, so nothing is ever silently dropped. */
+const TIMES=(()=>{const o=[];for(let m=7*60;m<=19*60;m+=5)
+  o.push(String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"));return o;})();
+const DURS=[10,15,20,25,30,40,45,50,55,60,75,80,90,120,150,180];
+/* Suggestions for the duration box, not a limit on it. */
+addEventListener("DOMContentLoaded",()=>{
+  const dl=document.getElementById("durList");
+  if(dl&&!dl.children.length)DURS.forEach(d=>{
+    const o=document.createElement("option");o.value=String(d);dl.appendChild(o);});
+});
+const EVCOLORS=["gray","pink","cyan","teal","indigo","orange","red","green","blue","yellow","purple"];
+addEventListener("DOMContentLoaded",()=>{
+  const f=document.getElementById("f_timefmt");
+  if(f)f.addEventListener("change",relabelTimes);
+});
+const DOWS=["Mon","Tue","Wed","Thu","Fri"];
+const NTHS=[["1","1st"],["2","2nd"],["3","3rd"],["4","4th"],["-1","last"]];
+/* PERIODS is already declared above, next to the term-card code. */
+
+function toMinutes(t){const[h,m]=t.split(":").map(Number);return h*60+m;}
+function fromMinutes(m){m=((m%1440)+1440)%1440;
+  return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
+/* Same rule as the popup: the option VALUE is always 24-hour (it is what goes
+   into the line), only the label follows the Time format setting on this page.
+   A form that offers 17:30 while the grid says 5:30 PM is two apps. */
+function fmt12(t){
+  const [h,m]=t.split(":").map(Number);
+  const ap=h>=12?"PM":"AM"; let hh=h%12; if(hh===0)hh=12;
+  return `${hh}:${String(m).padStart(2,"0")} ${ap}`;
+}
+function timeOpts(){
+  const is12=(document.getElementById("f_timefmt")||{}).value!=="24h";
+  return TIMES.map(t=>[t,is12?fmt12(t):t]);
+}
+function relabelTimes(){
+  const opts=timeOpts();
+  document.querySelectorAll(".ev_start,.sp_start,.sp_end").forEach(sel=>{
+    const keep=sel.value;
+    sel.innerHTML="";
+    opts.forEach(([v,l])=>{const o=document.createElement("option");
+      o.value=v;o.textContent=l;sel.appendChild(o);});
+    if(keep)sel.value=keep;
+  });
+}
+function mkSel(opts,val,w){
+  const el=document.createElement("select");
+  opts.forEach(o=>{const[v,label]=Array.isArray(o)?o:[o,o];
+    const op=document.createElement("option");op.value=v;op.textContent=label;
+    if(String(v)===String(val))op.selected=true;el.appendChild(op);});
+  el.style.cssText="font-size:.74rem;padding:.35rem;width:auto"+(w?";min-width:"+w:"");
+  return el;
+}
+function mkInput(val,ph,flex){
+  const el=document.createElement("input");
+  el.value=val||"";el.placeholder=ph||"";
+  el.style.cssText="font-size:.74rem;padding:.35rem;"+(flex?"flex:1 1 8rem;min-width:6rem":"width:auto");
+  return el;
+}
+function mkDate(val){
+  const el=document.createElement("input");el.type="date";el.value=val||"";
+  el.style.cssText="font-size:.74rem;padding:.3rem;width:auto";return el;
+}
+function delBtn(wrap){
+  const b=document.createElement("button");b.type="button";b.textContent="×";
+  b.style.cssText="width:auto;margin:0;padding:.3rem .55rem;background:var(--panel2);color:var(--ink-dim)";
+  b.onclick=()=>{wrap.remove();checkCaps();};return b;
+}
+/* Which class letters the student actually has, for the homework dropdown. */
+function periodOptions(){
+  const seen={};
+  document.querySelectorAll(".termcard .periodrow").forEach(row=>{
+    const nm=(row.querySelector(".c_name")||{}).value||"";
+    const p=(row.querySelector(".plabel")||{}).textContent||"";
+    if(nm.trim()&&p&&!seen[p])seen[p]=nm.trim();
+  });
+  return PERIODS.map(p=>[p,seen[p]?p+": "+seen[p]:p]);
+}
+
+/* ---------------- events ---------------- */
+function parseEventLine(line){
+  const p=String(line||"").split(" - ").map(x=>x.trim());
+  const when=p[0]||"", timeTok=p[2]||"", t=timeTok.split("-");
+  // "allday" in place of a time span: a deadline has no o'clock
+  const allday=/^all-?day$/i.test(timeTok);
+  if(!when||(!allday&&(t.length!==2||!/^\d{1,2}:\d{2}$/.test(t[0])||!/^\d{1,2}:\d{2}$/.test(t[1]))))return null;
+  const ev=allday?{name:p[1]||"",start:"15:30",end:"16:00",allday:true}
+                 :{name:p[1]||"",start:t[0],end:t[1]};
+  let rest=p.slice(3);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(when)){ev.mode="once";ev.date=when;}
+  else if(/^every\s+\d{1,3}\s+from\s+\d{4}-\d{2}-\d{2}$/i.test(when)){
+    /* A fixed number of DAYS from an anchor, for the things that are on no
+       weekday and no day of the month: a 90-day renewal, a 10-day cycle. */
+    const m=when.match(/^every\s+(\d{1,3})\s+from\s+(\d{4}-\d{2}-\d{2})$/i);
+    ev.mode="everyN";ev.everyN=m[1];ev.everyFrom=m[2];
+  }
+  else if(/^monthly\s+/i.test(when)){
+    const r=when.replace(/^monthly\s+/i,"").trim();
+    const nth=r.match(/^([A-Za-z]{3})#(-?\d)$/);
+    if(nth){ev.mode="nth";ev.dow=nth[1];ev.nth=nth[2];}
+    else if(/^\d{1,2}$/.test(r)){ev.mode="dom";ev.dom=r;}
+    else return null;
+  } else if(/^[A-Za-z]{3}(,[A-Za-z]{3})*$/.test(when.replace(/\s/g,""))){
+    ev.mode="weekly";ev.dows=when.replace(/\s/g,"").split(",");
+  } else return null;
+  if(rest.length&&/^\d{2}\.\d{2}-\d{2}\.\d{2}$/.test(rest[0])){
+    const rg=rest.shift().split("-");ev.from=rg[0];ev.to=rg[1];
+  }
+  ev.color=rest[0]||"gray";
+  if(rest.length>1)return null;               // something unexpected: keep raw
+  return ev;
+}
+function eventRow(line){
+  const wrap=document.createElement("div");
+  wrap.className="evrow";
+  wrap.style.cssText="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.4rem;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.4rem";
+  const ev=line?parseEventLine(line):{mode:"once",name:"",start:"15:30",end:"16:00",color:"gray"};
+  if(line&&!ev){                              // unparseable -> keep it as text
+    wrap.classList.add("raw");
+    const inp=mkInput(line,"",true);inp.oninput=checkCaps;
+    const tag=document.createElement("span");tag.textContent="raw";
+    tag.style.cssText="font-size:.62rem;color:var(--ink-dim)";
+    wrap.appendChild(tag);wrap.appendChild(inp);wrap.appendChild(delBtn(wrap));
+    document.getElementById("eventRows").appendChild(wrap);return wrap;
+  }
+  const mode=mkSel([["once","Once"],["weekly","Weekly"],["dom","Monthly (date)"],
+                    ["nth","Monthly (weekday)"],["everyN","Every N days"]],ev.mode,"9.5rem");
+  mode.className="ev_mode";
+  const when=document.createElement("span");
+  when.className="ev_when";
+  when.style.cssText="display:flex;gap:.3rem;align-items:center;flex-wrap:wrap";
+  function drawWhen(){
+    when.innerHTML="";
+    if(mode.value==="once"){
+      when.appendChild(mkDate(ev.date||""));
+      when.firstChild.className="ev_date";
+    } else if(mode.value==="weekly"){
+      DOWS.forEach(d=>{
+        const lab=document.createElement("label");
+        lab.style.cssText="font-size:.7rem;display:flex;align-items:center;gap:.15rem;cursor:pointer";
+        const cb=document.createElement("input");cb.type="checkbox";cb.className="ev_dow";cb.value=d;
+        cb.checked=(ev.dows||[]).includes(d);
+        cb.style.cssText="width:auto;margin:0;cursor:pointer";
+        lab.appendChild(cb);lab.appendChild(document.createTextNode(d));when.appendChild(lab);
+      });
+    } else if(mode.value==="everyN"){
+      const n=document.createElement("input");n.type="number";n.className="ev_everyn";
+      n.min="1";n.max="365";n.value=ev.everyN||"30";
+      n.style.cssText="font-size:.74rem;padding:.35rem;width:5.4rem";
+      const u=document.createElement("span");u.textContent="days from";
+      u.style.cssText="font-size:.7rem;color:var(--ink-dim)";
+      const f=mkDate(ev.everyFrom||"");f.className="ev_everyfrom";
+      when.appendChild(n);when.appendChild(u);when.appendChild(f);
+    } else if(mode.value==="dom"){
+      const n=mkSel(Array.from({length:31},(_,i)=>[String(i+1),"day "+(i+1)]),ev.dom||"15","5.5rem");
+      n.className="ev_dom";when.appendChild(n);
+    } else {
+      const n=mkSel(NTHS,ev.nth||"1","5rem");n.className="ev_nth";
+      const d=mkSel(DOWS,ev.dow||"Thu","5rem");d.className="ev_dowsel";
+      when.appendChild(n);when.appendChild(d);
+    }
+  }
+  mode.onchange=()=>{drawWhen();checkCaps();};
+  drawWhen();
+  const name=mkInput(ev.name,"What is it?",true);name.className="ev_name";
+  const start=mkSel(timeOpts(),ev.start,"6.6rem");start.className="ev_start";
+  /* A dropdown of round numbers could not express 80 minutes, or 35, or
+     anything else somebody's actual commitment happens to run for. Typed in,
+     with the common lengths still one click away in the datalist. */
+  const durMin=Math.max(5,toMinutes(ev.end)-toMinutes(ev.start));
+  const dur=document.createElement("input");
+  dur.type="number";dur.min="5";dur.max="600";dur.step="5";dur.value=String(durMin);
+  dur.className="ev_dur";dur.setAttribute("list","durList");
+  dur.title="Minutes. Anything from 5 to 600.";
+  // three digits plus the spinner arrows: 4.6rem cut the last one off
+  dur.style.cssText="font-size:.74rem;padding:.35rem;width:6rem";
+  const minLabel=document.createElement("span");minLabel.textContent="min";
+  minLabel.style.cssText="font-size:.7rem;color:var(--ink-dim)";
+  const color=mkSel(EVCOLORS,ev.color||"gray","5.5rem");color.className="ev_color";
+  const forLabel=document.createElement("span");forLabel.textContent="for";
+  forLabel.style.cssText="font-size:.7rem;color:var(--ink-dim)";
+  /* All day. The time controls come down rather than staying up and being
+     ignored, which is how somebody ends up certain the app saved 15:30. */
+  const adLab=document.createElement("label");
+  adLab.style.cssText="font-size:.7rem;display:flex;align-items:center;gap:.2rem;cursor:pointer;white-space:nowrap";
+  const adCb=document.createElement("input");adCb.type="checkbox";adCb.className="ev_allday";
+  adCb.checked=!!ev.allday;adCb.style.cssText="width:auto;margin:0;cursor:pointer";
+  adLab.appendChild(adCb);adLab.appendChild(document.createTextNode("all day"));
+  /* The season window. It was already being read off the line and then thrown
+     away on save, so an event with one lost it the first time anybody opened
+     this form. */
+  const btwLab=document.createElement("span");btwLab.textContent="only between";
+  btwLab.style.cssText="font-size:.7rem;color:var(--ink-dim)";
+  const evFrom=mkDate(mmddToDate(ev.from));evFrom.className="ev_from";
+  evFrom.title="First day this applies (the year is ignored)";
+  const evTo=mkDate(mmddToDate(ev.to));evTo.className="ev_to";
+  evTo.title="Last day this applies. It may fall in the next calendar year.";
+  const btw=document.createElement("span");btw.className="ev_range";
+  btw.style.cssText="display:flex;gap:.3rem;align-items:center";
+  [btwLab,evFrom,evTo].forEach(el=>btw.appendChild(el));
+  function syncEvBits(){
+    const ad=adCb.checked;
+    [start,forLabel,dur,minLabel].forEach(el=>el.style.display=ad?"none":"");
+    // a one-off has a date already; a window on top of it means nothing
+    btw.style.display=mode.value==="once"?"none":"flex";
+  }
+  adCb.onchange=syncEvBits;
+  const modeWas=mode.onchange;
+  mode.onchange=()=>{modeWas();syncEvBits();};
+  [mode,when,name,adLab,start,forLabel,dur,minLabel,btw,color,delBtn(wrap)].forEach(el=>wrap.appendChild(el));
+  syncEvBits();
+  wrap.querySelectorAll("input,select").forEach(el=>el.addEventListener("change",checkCaps));
+  document.getElementById("eventRows").appendChild(wrap);
+  return wrap;
+}
+function eventRowToText(wrap){
+  if(wrap.classList.contains("raw"))return (wrap.querySelector("input").value||"").trim();
+  const q=c=>wrap.querySelector(c);
+  const name=(q(".ev_name").value||"").trim();
+  if(!name)return "";
+  const mode=q(".ev_mode").value;
+  let when="";
+  if(mode==="once"){when=(q(".ev_date")||{}).value||"";}
+  else if(mode==="weekly"){
+    when=Array.from(wrap.querySelectorAll(".ev_dow")).filter(c=>c.checked).map(c=>c.value).join(",");
+  } else if(mode==="everyN"){
+    const n=parseInt((q(".ev_everyn")||{}).value,10), f=(q(".ev_everyfrom")||{}).value;
+    if(!n||n<1||!f)return "";
+    when=`every ${n} from ${f}`;
+  } else if(mode==="dom"){when="monthly "+q(".ev_dom").value;}
+  else {when="monthly "+q(".ev_dowsel").value+"#"+q(".ev_nth").value;}
+  if(!when)return "";
+  const st=q(".ev_start").value;
+  /* Clamped, and never past the end of the day: fromMinutes() wraps, so an
+     event running to "25:30" would come out as 01:30 and look like it starts
+     before it ends. */
+  const mins=Math.max(5,Math.min(600,parseInt(q(".ev_dur").value,10)||30));
+  const en=fromMinutes(Math.min(toMinutes(st)+mins,23*60+55));
+  const timeTok=q(".ev_allday").checked?"allday":`${st}-${en}`;
+  let range="";
+  if(mode!=="once"){
+    const f=dateToMmdd((q(".ev_from")||{}).value), t=dateToMmdd((q(".ev_to")||{}).value);
+    if(f&&t)range=` - ${f}-${t}`;
+  }
+  return `${when} - ${name} - ${timeTok}${range} - ${q(".ev_color").value}`;
+}
+
+/* ---------------- sports ----------------
+   A sport used to be one text box: "Swimming - Mon,Thu - 15:45-17:15 -
+   09.01-11.30 - cyan". Nobody wants to type days of the week as a string, and
+   there was exactly one box per semester -- which cannot hold three seasons.
+   Now: tick the days, pick the times from a dropdown, pick a colour, and the
+   season is two date pickers (the year is thrown away, only MM.DD is kept, so
+   a winter season crossing New Year is fine). */
+const MAX_SPORTS={{ caps.sports }};
+
+function parseSportLine(line){
+  const p=String(line||"").split(" - ").map(x=>x.trim());
+  const t=(p[2]||"").split("-");
+  if(!p[0]||!/^[A-Za-z]{3}(,[A-Za-z]{3})*$/.test((p[1]||"").replace(/\s/g,"")))return null;
+  if(t.length!==2||!/^\d{1,2}:\d{2}$/.test(t[0])||!/^\d{1,2}:\d{2}$/.test(t[1]))return null;
+  const sp={name:p[0],dows:p[1].replace(/\s/g,"").split(","),start:t[0],end:t[1],from:"",to:""};
+  let rest=p.slice(3);
+  if(rest.length&&/^\d{2}\.\d{2}-\d{2}\.\d{2}$/.test(rest[0])){
+    const rg=rest.shift().split("-");sp.from=rg[0];sp.to=rg[1];
+  }
+  sp.color=rest[0]||"cyan";
+  if(rest.length>1)return null;
+  return sp;
+}
+/* The stored form is MM.DD; <input type=date> wants a year. Which year does
+   not matter -- nothing reads it back -- so use a leap year so 02.29 survives
+   a round trip. */
+function mmddToDate(v){return /^\d{2}\.\d{2}$/.test(v||"")?"2024-"+v.replace(".","-"):"";}
+function dateToMmdd(v){const m=/^\d{4}-(\d{2})-(\d{2})$/.exec(v||"");return m?m[1]+"."+m[2]:"";}
+
+function sportRow(line){
+  const wrap=document.createElement("div");
+  wrap.className="sprow";
+  wrap.style.cssText="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.4rem;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.4rem";
+  const sp=line?parseSportLine(line):{name:"",dows:[],start:"15:45",end:"17:15",from:"",to:"",color:"cyan"};
+  if(line&&!sp){                              // unparseable -> keep it as text
+    wrap.classList.add("raw");
+    const inp=mkInput(line,"",true);inp.oninput=checkCaps;
+    const tag=document.createElement("span");tag.textContent="raw";
+    tag.style.cssText="font-size:.62rem;color:var(--ink-dim)";
+    wrap.appendChild(tag);wrap.appendChild(inp);wrap.appendChild(delBtn(wrap));
+    document.getElementById("sportRows").appendChild(wrap);return wrap;
+  }
+  const name=mkInput(sp.name,"Sport",true);name.className="sp_name";
+  const days=document.createElement("span");
+  days.style.cssText="display:flex;gap:.3rem;align-items:center;flex-wrap:wrap";
+  DOWS.forEach(d=>{
+    const lab=document.createElement("label");
+    lab.style.cssText="font-size:.7rem;display:flex;align-items:center;gap:.15rem;cursor:pointer";
+    const cb=document.createElement("input");cb.type="checkbox";cb.className="sp_dow";cb.value=d;
+    cb.checked=(sp.dows||[]).includes(d);
+    cb.style.cssText="width:auto;margin:0;cursor:pointer";
+    lab.appendChild(cb);lab.appendChild(document.createTextNode(d));days.appendChild(lab);
+  });
+  const start=mkSel(timeOpts(),sp.start,"6.6rem");start.className="sp_start";
+  const end=mkSel(timeOpts(),sp.end,"6.6rem");end.className="sp_end";
+  const to=document.createElement("span");to.textContent="to";
+  to.style.cssText="font-size:.7rem;color:var(--ink-dim)";
+  const seasonLab=document.createElement("span");seasonLab.textContent="season";
+  seasonLab.style.cssText="font-size:.7rem;color:var(--ink-dim)";
+  const from=mkDate(mmddToDate(sp.from));from.className="sp_from";from.title="First day of the season";
+  const until=mkDate(mmddToDate(sp.to));until.className="sp_to";until.title="Last day of the season (may be in the next calendar year -- winter is fine)";
+  const color=mkSel(EVCOLORS,sp.color||"cyan","5.5rem");color.className="sp_color";
+  [name,days,start,to,end,seasonLab,from,until,color,delBtn(wrap)].forEach(el=>wrap.appendChild(el));
+  wrap.querySelectorAll("input,select").forEach(el=>el.addEventListener("change",checkCaps));
+  document.getElementById("sportRows").appendChild(wrap);
+  return wrap;
+}
+function sportRowToText(wrap){
+  if(wrap.classList.contains("raw"))return (wrap.querySelector("input").value||"").trim();
+  const q=c=>wrap.querySelector(c);
+  const name=(q(".sp_name").value||"").trim();
+  const dows=Array.from(wrap.querySelectorAll(".sp_dow")).filter(c=>c.checked).map(c=>c.value);
+  if(!name||!dows.length)return "";
+  const from=dateToMmdd(q(".sp_from").value), to=dateToMmdd(q(".sp_to").value);
+  const range=(from&&to)?` - ${from}-${to}`:"";
+  return `${name} - ${dows.join(",")} - ${q(".sp_start").value}-${q(".sp_end").value}`
+         + `${range} - ${q(".sp_color").value}`;
+}
+
+/* ---------------- projects ----------------
+   A project is a name and two dates. Deliberately nothing else: what it is
+   made of lives in the homework rows, which already know how to land on a
+   particular class on a particular day, and how far along it is is COUNTED
+   from those rather than typed in -- a typed percentage and a list of ticks
+   disagree the first time anyone edits one of them. */
+const MAX_PROJECTS={{ caps.projects }};
+
+function parseProjLine(line){
+  const p=String(line||"").split(" - ").map(x=>x.trim());
+  if(!p[0]||!/^\d{4}-\d{2}-\d{2}$/.test(p[1]||"")||!/^\d{4}-\d{2}-\d{2}$/.test(p[2]||""))
+    return null;
+  if(p.length>4)return null;
+  return {name:p[0],from:p[1],to:p[2],color:p[3]||"blue"};
+}
+function projRow(line){
+  const wrap=document.createElement("div");
+  wrap.className="prrow";
+  wrap.style.cssText="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.4rem;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.4rem";
+  const pr=line?parseProjLine(line):{name:"",from:"",to:"",color:"blue"};
+  if(line&&!pr){
+    wrap.classList.add("raw");
+    const inp=mkInput(line,"",true);inp.oninput=checkCaps;
+    const tag=document.createElement("span");tag.textContent="raw";
+    tag.style.cssText="font-size:.62rem;color:var(--ink-dim)";
+    wrap.appendChild(tag);wrap.appendChild(inp);wrap.appendChild(delBtn(wrap));
+    document.getElementById("projRows").appendChild(wrap);return wrap;
+  }
+  const name=mkInput(pr.name,"Project name",true);name.className="pr_name";
+  const from=mkDate(pr.from);from.className="pr_from";from.title="First day";
+  const to=mkDate(pr.to);to.className="pr_to";to.title="Due date / last day";
+  const arrow=document.createElement("span");arrow.textContent="to";
+  arrow.style.cssText="font-size:.7rem;color:var(--ink-dim)";
+  const color=mkSel(EVCOLORS,pr.color||"blue","5.5rem");color.className="pr_color";
+  [name,from,arrow,to,color,delBtn(wrap)].forEach(el=>wrap.appendChild(el));
+  // renaming a project has to follow through to the homework attached to it
+  name.addEventListener("input",refreshProjOptions);
+  wrap.querySelectorAll("input,select").forEach(el=>el.addEventListener("change",checkCaps));
+  document.getElementById("projRows").appendChild(wrap);
+  refreshProjOptions();
+  return wrap;
+}
+function projRowToText(wrap){
+  if(wrap.classList.contains("raw"))return (wrap.querySelector("input").value||"").trim();
+  const q=c=>wrap.querySelector(c);
+  const name=(q(".pr_name").value||"").trim();
+  const from=q(".pr_from").value, to=q(".pr_to").value;
+  if(!name||!from||!to)return "";
+  return `${name} - ${from} - ${to} - ${q(".pr_color").value}`;
+}
+function projectNames(){
+  return Array.from(document.querySelectorAll("#projRows .pr_name"))
+    .map(i=>i.value.trim()).filter(Boolean);
+}
+/* Keep every homework row's project dropdown in step with the project rows,
+   without losing what each one already points at. */
+function refreshProjOptions(){
+  const names=projectNames();
+  document.querySelectorAll("#hwRows .hw_proj").forEach(sel=>{
+    const cur=sel.value;
+    sel.innerHTML="";
+    const none=document.createElement("option");none.value="";none.textContent="\u2014";
+    sel.appendChild(none);
+    names.forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=n;
+                      sel.appendChild(o);});
+    if(cur&&!names.includes(cur)){         // a project that has been renamed or removed
+      const o=document.createElement("option");o.value=cur;o.textContent=cur+" (gone)";
+      sel.appendChild(o);
+    }
+    sel.value=cur;
+  });
+}
+
+/* ---------------- homework ---------------- */
+function parseHwLine(line){
+  const p=String(line||"").split(" - ").map(x=>x.trim());
+  if(p.length<4||p.length>6||!/^[A-H]$/.test(p[0])||!/^\d{4}-\d{2}-\d{2}$/.test(p[3]))return null;
+  const when=p[1].toLowerCase();
+  if(when!=="before"&&when!=="during")return null;
+  // optional tail, either order: which project this belongs to, and "done"
+  const tail=p.slice(4).filter(x=>x!=="");
+  const done=tail.some(x=>x.toLowerCase()==="done");
+  const proj=tail.find(x=>x.toLowerCase()!=="done")||"";
+  return {period:p[0],when:when,name:p[2],date:p[3],proj:proj,done:done};
+}
+function hwRow(line){
+  const wrap=document.createElement("div");
+  wrap.className="hwrow";
+  wrap.style.cssText="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.4rem;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.4rem";
+  const h=line?parseHwLine(line):{period:"A",when:"before",name:"",date:""};
+  if(line&&!h){
+    wrap.classList.add("raw");
+    const inp=mkInput(line,"",true);inp.oninput=checkCaps;
+    const tag=document.createElement("span");tag.textContent="raw";
+    tag.style.cssText="font-size:.62rem;color:var(--ink-dim)";
+    wrap.appendChild(tag);wrap.appendChild(inp);wrap.appendChild(delBtn(wrap));
+    document.getElementById("hwRows").appendChild(wrap);return wrap;
+  }
+  const per=mkSel(periodOptions(),h.period,"9rem");per.className="hw_per";
+  const when=mkSel([["before","due before class"],["during","do in class"]],h.when,"9rem");
+  when.className="hw_when";
+  const name=mkInput(h.name,"What is it?",true);name.className="hw_name";
+  const date=mkDate(h.date);date.className="hw_date";
+  const proj=mkSel([["",""]],h.proj||"","9rem");proj.className="hw_proj";
+  proj.title="Part of which project, if any";
+  const doneLab=document.createElement("label");
+  doneLab.style.cssText="font-size:.7rem;display:flex;align-items:center;gap:.2rem;cursor:pointer;color:var(--ink-dim)";
+  const done=document.createElement("input");done.type="checkbox";done.className="hw_done";
+  done.checked=!!h.done;done.style.cssText="width:auto;margin:0;cursor:pointer";
+  doneLab.appendChild(done);doneLab.appendChild(document.createTextNode("done"));
+  [per,when,name,date,proj,doneLab,delBtn(wrap)].forEach(el=>wrap.appendChild(el));
+  wrap.querySelectorAll("input,select").forEach(el=>el.addEventListener("change",checkCaps));
+  document.getElementById("hwRows").appendChild(wrap);
+  refreshProjOptions();
+  if(h.proj)wrap.querySelector(".hw_proj").value=h.proj;
+  return wrap;
+}
+function hwRowToText(wrap){
+  if(wrap.classList.contains("raw"))return (wrap.querySelector("input").value||"").trim();
+  const q=c=>wrap.querySelector(c);
+  const name=(q(".hw_name").value||"").trim(), date=q(".hw_date").value;
+  if(!name||!date)return "";
+  let out=`${q(".hw_per").value} - ${q(".hw_when").value} - ${name} - ${date}`;
+  const proj=(q(".hw_proj")||{}).value||"";
+  const done=(q(".hw_done")||{}).checked;
+  // "done" alone still has to be distinguishable from a project called "done",
+  // so a ticked item with no project writes an empty project field.
+  if(proj||done) out += ` - ${proj}`;
+  if(done) out += " - done";
+  return out;
+}
+
+function checkCaps(){
+  const ne=document.querySelectorAll("#eventRows .evrow").length;
+  const nh=document.querySelectorAll("#hwRows .hwrow").length;
+  const ns=document.querySelectorAll("#sportRows .sprow").length;
+  const np=document.querySelectorAll("#projRows .prrow").length;
+  const w=document.getElementById("capWarn");
+  const msgs=[];
+  if(ns>MAX_SPORTS)msgs.push(`${ns} sports (max ${MAX_SPORTS})`);
+  if(np>MAX_PROJECTS)msgs.push(`${np} projects (max ${MAX_PROJECTS})`);
+  if(ne>MAX_EVENTS)msgs.push(`${ne} events (max ${MAX_EVENTS})`);
+  if(nh>MAX_HW)msgs.push(`${nh} homework items (max ${MAX_HW})`);
+  w.textContent=msgs.length?("Too many: "+msgs.join(", ")+". Saving will be refused."):"";
+  w.style.display=msgs.length?"block":"none";
+}
+function addRow(where,cls,val){
+  return where==="eventRows"?eventRow(val||""):hwRow(val||"");
+}
+/* At the cap, offer to drop the oldest instead of making someone go and find
+   it -- the same deal the double-click shortcut on the schedule page offers. */
+function atCapOk(sel,cap,what){
+  const rows=document.querySelectorAll(sel);
+  if(rows.length<cap)return true;
+  const first=rows[0];
+  const describe=first.classList.contains("raw")
+      ? first.querySelector("input").value
+      : (first.querySelector(".ev_name")||first.querySelector(".hw_name")
+         ||first.querySelector(".sp_name")||first.querySelector(".pr_name")
+         ||{}).value||"(empty)";
+  if(confirm(`You already have ${cap} ${what}, which is the limit.\n\n`
+           + `The oldest one is:\n    ${describe}\n\n`
+           + `Drop that one and add a new one?`)){
+    first.remove();
+    return true;
+  }
+  return false;
+}
+document.getElementById("addEvent").onclick=()=>{
+  if(!atCapOk("#eventRows .evrow",MAX_EVENTS,"events"))return;
+  eventRow("");checkCaps();
+};
+document.getElementById("addHw").onclick=()=>{
+  if(!atCapOk("#hwRows .hwrow",MAX_HW,"homework items"))return;
+  hwRow("");checkCaps();
+};
+document.getElementById("addProj").onclick=()=>{
+  if(!atCapOk("#projRows .prrow",MAX_PROJECTS,"projects"))return;
+  projRow("");checkCaps();
+};
+document.getElementById("addSport").onclick=()=>{
+  if(!atCapOk("#sportRows .sprow",MAX_SPORTS,"sports"))return;
+  sportRow("");checkCaps();
+};
+
+/* Leaving /edit with unsaved typing loses it silently, and this page is where
+   people spend ten minutes entering a schedule by hand. */
+let DIRTY = false;
+/* The .ics import leaves this page for a preview, so the unsaved-changes
+   guard has to know that is deliberate. */
+(function(){
+  const sel=document.getElementById("icsColor");
+  EVCOLORS.forEach(c=>{const o=document.createElement("option");
+    o.value=o.textContent=c;sel.appendChild(o);});
+  sel.value="pink";
+  document.getElementById("icsBtn").onclick=()=>document.getElementById("icsFile").click();
+  document.getElementById("icsFile").onchange=()=>{
+    if(!document.getElementById("icsFile").files.length)return;
+    if(LOCAL){ localIcs(); return; }
+    DIRTY=false;
+    document.getElementById("icsForm").submit();
+  };
+})();
+
+/* ---------------- .ics import, local mode ----------------
+   Same parser, same proposals; the difference is only where the list is held
+   while you look at it. The account flow writes the upload to a temp file so a
+   second page can render it. Nothing here may touch the disk, so the list is
+   built in this page from the JSON and never exists anywhere else. */
+function textNow(){
+  return (mode==="text") ? document.getElementById("rawText").value : formToText();
+}
+/* @pref lines are documented as going last, so new lines go in above them
+   rather than after -- the same rule the schedule page uses when it adds a
+   line from the grid. */
+function insertLines(lines){
+  const cur=textNow().replace(/\s+$/,"").split(/\r?\n/);
+  let at=cur.length;
+  for(let i=0;i<cur.length;i++){
+    if(cur[i].trim().startsWith("@pref")){ at=i; break; }
+  }
+  const before=cur.slice(0,at), after=cur.slice(at);
+  if(before.length && before[before.length-1].trim()!=="") before.push("");
+  const out=before.concat(lines, after.length?[""].concat(after):[]);
+  return out.join("\n").replace(/\n{3,}/g,"\n\n");
+}
+async function localIcs(){
+  const box=document.getElementById("icsBox");
+  const st=document.getElementById("importStatus");
+  const fi=document.getElementById("icsFile");
+  const f=fi.files[0];
+  box.style.display=""; box.textContent="Reading "+f.name+"\u2026";
+  const fd=new FormData();
+  fd.append("ics", f);
+  fd.append("color", document.getElementById("icsColor").value||"gray");
+  fi.value="";                            // let the same file be picked again
+  let r,j;
+  try{ r=await fetch("/api/parse-ics",{method:"POST",body:fd}); j=await r.json(); }
+  catch(e){ box.textContent="Upload failed: "+e; return; }
+  if(!r.ok||j.error){ box.textContent=j.error||("Error "+r.status); return; }
+  drawIcs(j, f.name);
+}
+function drawIcs(j, filename){
+  const box=document.getElementById("icsBox");
+  box.textContent="";
+  const items=j.items||[], skipped=j.skipped||[];
+  const have=new Set(textNow().split(/\r?\n/).map(x=>x.trim()));
+
+  const head=document.createElement("div");
+  head.className="hint";
+  head.style.cssText="margin:0 0 .6rem;line-height:1.6";
+  head.textContent=`From ${filename}${j.calname?" \u00b7 \u201c"+j.calname+"\u201d":""}. `
+    +`${items.length} readable`
+    +(skipped.length?`, ${skipped.length} this app has no way to store`:"")
+    +". This is a one-time copy: nothing here links back to the original "
+    +"calendar, so if a deadline moves in the file it will not move here.";
+  box.appendChild(head);
+
+  if(!items.length){
+    const none=document.createElement("div");
+    none.textContent="Nothing in that file could be turned into a schedule line.";
+    box.appendChild(none);
+    return;
+  }
+
+  const list=document.createElement("div");
+  list.style.cssText="max-height:22rem;overflow:auto";
+  const boxes=[];
+  items.forEach(it=>{
+    const row=document.createElement("label");
+    row.style.cssText="display:flex;gap:.5rem;align-items:flex-start;padding:.35rem 0;"
+                     +"border-bottom:1px solid var(--line);cursor:pointer";
+    const cb=document.createElement("input");
+    cb.type="checkbox"; cb.style.cssText="width:auto;margin:.2rem 0 0";
+    const dup=have.has(it.line);
+    cb.checked=!dup; cb.value=it.line; boxes.push(cb);
+    const txt=document.createElement("div");
+    txt.style.cssText="flex:1;min-width:0";
+    const nm=document.createElement("div");
+    nm.textContent=it.name||"(no name)";
+    const wh=document.createElement("div");
+    wh.style.cssText="color:var(--ink-dim);font-size:.72rem";
+    wh.textContent=(it.when_human||"")+(it.note?" \u00b7 "+it.note:"")
+                  +(dup?" \u00b7 already in your schedule":"");
+    const ln=document.createElement("div");
+    ln.style.cssText="color:var(--ink-dim);font-size:.68rem;word-break:break-all";
+    ln.textContent=it.line;
+    txt.appendChild(nm); txt.appendChild(wh); txt.appendChild(ln);
+    row.appendChild(cb); row.appendChild(txt);
+    list.appendChild(row);
+  });
+  box.appendChild(list);
+
+  if(skipped.length){
+    const sk=document.createElement("details");
+    sk.style.cssText="margin-top:.5rem;color:var(--ink-dim);font-size:.72rem";
+    const sum=document.createElement("summary");
+    sum.textContent=`${skipped.length} left out`;
+    sum.style.cursor="pointer";
+    sk.appendChild(sum);
+    skipped.forEach(x=>{
+      const d=document.createElement("div");
+      d.textContent="\u00b7 "+(x.name||"(no name)")+": "+(x.reason||"");
+      sk.appendChild(d);
+    });
+    box.appendChild(sk);
+  }
+
+  const bar=document.createElement("div");
+  bar.style.cssText="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-top:.7rem";
+  const mk=(label,fn,quiet)=>{
+    const b=document.createElement("button");
+    b.type="button"; b.textContent=label;
+    b.style.cssText="width:auto;margin:0;padding:.4rem .8rem;font-size:.76rem"
+      +(quiet?";background:var(--panel2);color:var(--ink);border:1px solid var(--line)":"");
+    b.onclick=fn; bar.appendChild(b); return b;
+  };
+  mk("Tick all",()=>boxes.forEach(c=>c.checked=true),true);
+  mk("Untick all",()=>boxes.forEach(c=>c.checked=false),true);
+  mk("Add the ticked ones",()=>{
+    const lines=boxes.filter(c=>c.checked).map(c=>c.value);
+    if(!lines.length){ return; }
+    const merged=insertLines(lines);
+    const problem=textProblem(merged);
+    if(problem){
+      /* All or nothing, like the server's version: half an import is worse
+         than none, because you cannot tell which half you got. */
+      const st=document.getElementById("importStatus");
+      st.style.color="var(--bad)";
+      st.textContent=problem+" Untick a few and try again.";
+      return;
+    }
+    loadIntoEditor(merged);
+    mode="text"; bT.onclick();
+    DIRTY=true;
+    box.style.display="none";
+    const st=document.getElementById("importStatus");
+    st.style.color="var(--good)";
+    st.textContent=`Added ${lines.length} line${lines.length===1?"":"s"}. Check it, then press Save.`;
+    window.scrollTo({top:0,behavior:"smooth"});
+  });
+  mk("Cancel",()=>{ box.style.display="none"; box.textContent=""; },true);
+  box.appendChild(bar);
+}
+/* ---------------- earlier versions ---------------- */
+/* The only safety net used to be the whole-database snapshot, which runs when
+   an ADMIN opens /admin -- so a student who pasted over their schedule on
+   Tuesday and noticed on Thursday might have nothing behind them, and could
+   not have reached it anyway. */
+let HIST=null;
+async function loadHistory(){
+  const box=document.getElementById("histBox");
+  box.textContent="Looking…";
+  try{
+    const r=await fetch("/api/my-history",{cache:"no-store"});
+    const j=await r.json();
+    HIST=j.versions||[];
+  }catch(e){ box.textContent="Couldn't load your earlier versions."; return; }
+  box.innerHTML="";
+  if(!HIST.length){
+    box.textContent="No earlier versions yet. One is kept every time your "
+                   +"schedule changes.";
+    return;
+  }
+  HIST.forEach((v,i)=>{
+    const row=document.createElement("div");
+    row.style.cssText="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;"
+                     +"padding:.35rem 0;border-bottom:1px solid var(--line)";
+    const when=document.createElement("span");
+    when.style.cssText="min-width:11rem;font-variant-numeric:tabular-nums";
+    when.textContent=v.saved_at||"";
+    const what=document.createElement("span");
+    what.style.cssText="color:var(--ink-dim);font-size:.72rem;flex:1;min-width:12rem";
+    const many=(n,one,more)=>`${n} ${n===1?one:(more||one+"s")}`;
+    what.textContent=`${many(v.events,"event")} · ${many(v.hw,"homework","homework")}`
+      +` · ${many(v.sports,"sport")} · ${many(v.projects,"project")} · `
+      +(v.changed? `${many(v.changed,"line")} different from now` : "same as now");
+    const btn=document.createElement("button");
+    btn.type="button";btn.className="tinybtn";
+    btn.style.cssText="width:auto;margin:0;padding:.3rem .6rem;font-size:.72rem";
+    btn.textContent="Load into the editor";
+    btn.onclick=()=>{
+      if(!confirm("Fill this page in with the version from "+(v.saved_at||"then")
+                 +"?\n\nNothing is saved until you press Save, and your "
+                 +"current one stays in this list."))return;
+      loadIntoEditor(v.text);
+      DIRTY=true;
+      document.getElementById("importStatus").textContent=
+        "Loaded the version from "+(v.saved_at||"earlier")+". Press Save to keep it.";
+      window.scrollTo({top:0,behavior:"smooth"});
+    };
+    [when,what,btn].forEach(el=>row.appendChild(el));
+    box.appendChild(row);
+  });
+}
+if(document.getElementById("histBtn")) document.getElementById("histBtn").onclick=()=>{
+  const box=document.getElementById("histBox");
+  const open=box.style.display!=="none";
+  box.style.display=open?"none":"";
+  if(!open&&!HIST)loadHistory();
+};
+
+addEventListener("input", () => { DIRTY = true; }, true);
+addEventListener("change", () => { DIRTY = true; }, true);
+document.getElementById("schedForm").addEventListener("submit", () => { DIRTY = false; });
+addEventListener("beforeunload", e => { if (DIRTY) { e.preventDefault(); e.returnValue = ""; } });
+
+const model=parse(SAVED|| "");
+document.getElementById("f_name").value=model.name;
+document.getElementById("f_form").value=model.form;
+document.getElementById("f_timefmt").value=model.timefmt;
+// the rows are built below, and they read f_timefmt themselves (timeOpts()),
+// so the only thing that needs relabelling later is a LIVE change of it
+if(model.terms.length) model.terms.forEach(addTermCard); else addTermCard();
+// after the term cards: the homework dropdown labels itself from them
+(model.sports||[]).forEach(v=>sportRow(v));
+(model.projects||[]).forEach(v=>projRow(v));
+(model.events||[]).forEach(v=>eventRow(v));
+(model.hw||[]).forEach(v=>hwRow(v));
+checkCaps();
+document.getElementById("rawText").value = SAVED || EXAMPLE;
+
+let mode="form";
+const formPane=document.getElementById("formPane"), textPane=document.getElementById("textPane");
+const bF=document.getElementById("modeForm"), bT=document.getElementById("modeText");
+bF.onclick=()=>{ if(mode==="text"){
+    const m=parse(document.getElementById("rawText").value);
+    document.getElementById("f_name").value=m.name;
+    document.getElementById("f_form").value=m.form;
+    document.getElementById("f_timefmt").value=m.timefmt;
+    termsEl.innerHTML=""; (m.terms.length?m.terms:[null]).forEach(t=>addTermCard(t));
+    document.getElementById("sportRows").innerHTML="";
+    document.getElementById("eventRows").innerHTML="";
+    document.getElementById("hwRows").innerHTML="";
+    document.getElementById("projRows").innerHTML="";
+    (m.sports||[]).forEach(v=>sportRow(v));
+    (m.projects||[]).forEach(v=>projRow(v));
+    (m.events||[]).forEach(v=>eventRow(v));
+    (m.hw||[]).forEach(v=>hwRow(v));
+    checkCaps();
+  }
+  mode="form";formPane.style.display="";textPane.style.display="none";bF.classList.add("on");bT.classList.remove("on");bF.style.background="";bF.style.color="";bT.style.background="var(--panel2)";bT.style.color="var(--ink)";
+};
+bT.onclick=()=>{ if(mode==="form"){ document.getElementById("rawText").value=formToText(); }
+  mode="text";textPane.style.display="";formPane.style.display="none";bT.classList.add("on");bF.classList.remove("on");bT.style.background="";bT.style.color="";bF.style.background="var(--panel2)";bF.style.color="var(--ink)";
+};
+
+// ---- load a saved .txt back into this page (nothing is saved until Save) ----
+function loadIntoEditor(text){
+  document.getElementById("rawText").value = text;
+  const m = parse(text);
+  document.getElementById("f_name").value = m.name;
+  document.getElementById("f_form").value = m.form;
+  document.getElementById("f_timefmt").value = m.timefmt;
+  termsEl.innerHTML = "";
+  (m.terms.length ? m.terms : [null]).forEach(t => addTermCard(t));
+  document.getElementById("sportRows").innerHTML = "";
+  document.getElementById("eventRows").innerHTML = "";
+  document.getElementById("hwRows").innerHTML = "";
+  document.getElementById("projRows").innerHTML = "";
+  (m.sports || []).forEach(v => sportRow(v));
+  (m.projects || []).forEach(v => projRow(v));
+  (m.events || []).forEach(v => eventRow(v));
+  (m.hw || []).forEach(v => hwRow(v));
+  checkCaps();
+}
+// ---- one-click import straight from the Veracross PDF -------------------
+document.getElementById("pdfBtn").onclick = () =>
+  document.getElementById("pdfFile").click();
+document.getElementById("pdfFile").onchange = async ev => {
+  const f = ev.target.files[0]; ev.target.value = "";
+  if(!f) return;
+  const s = document.getElementById("importStatus");
+  s.style.color = "var(--ink-dim)"; s.textContent = "Reading " + f.name + "…";
+  const fd = new FormData(); fd.append("pdf", f);
+  let r, j;
+  const PDF_URL = LOCAL ? "/api/parse-pdf" : "{{ url_for('edit_import_pdf') }}";
+  try { r = await fetch(PDF_URL, {method:"POST", body:fd});
+        j = await r.json(); }
+  catch(e){ s.style.color="var(--bad)"; s.textContent="Upload failed: "+e; return; }
+  if(!r.ok || j.error){ s.style.color="var(--bad)"; s.textContent=j.error||("Error "+r.status); return; }
+  loadIntoEditor(j.text);
+  mode="text"; bT.onclick();
+  s.style.color = "var(--good)";
+  s.textContent = `Read ${j.count} classes for ${j.term}. Check it, then press Save.`;
+  /* Two boxes: an alert only when something really does need a human, and a
+     quiet note for the things the import already dealt with. They used to
+     share one red box, which made a routine lab double look like a fault. */
+  const esc = w => w.replace(/</g,"&lt;");
+  const warnBox = document.getElementById("pdfWarn");
+  const noteBox = document.getElementById("pdfNote");
+  warnBox.style.display = noteBox.style.display = "none";
+  if(j.warnings && j.warnings.length){
+    warnBox.style.display = "";
+    warnBox.innerHTML = "<b>Worth checking:</b><br>" +
+      j.warnings.map(w => "\u00b7 " + esc(w)).join("<br>");
+  }
+  if(j.notes && j.notes.length){
+    noteBox.style.display = "";
+    noteBox.innerHTML = "<b>Handled for you, nothing to do:</b><br>" +
+      j.notes.map(w => "\u00b7 " + esc(w)).join("<br>");
+  }
+};
+
+document.getElementById("importBtn").onclick = () =>
+  document.getElementById("importFile").click();
+document.getElementById("importFile").onchange = ev => {
+  const f = ev.target.files[0];
+  if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    loadIntoEditor(String(r.result || ""));
+    mode = "text";      // set BEFORE switching, or bT.onclick would regenerate
+    bT.onclick();       // ...the text from the form and discard the file
+    const s = document.getElementById("importStatus");
+    s.textContent = "Loaded " + f.name + ". Check it, then press Save.";
+    s.style.color = "var(--good)";
+  };
+  r.readAsText(f);
+  ev.target.value = "";                 // let the same file be picked again
+};
+
+/* The server refuses an oversized or over-capped schedule in
+   schedule_text_problem(). Local mode has no server in the loop, so the same
+   rules are applied here -- deliberately the same sentences, so the two modes
+   do not disagree about what is allowed. */
+function textProblem(text){
+  const bytes = new TextEncoder().encode(text).length;
+  if(bytes > MAX_BYTES)
+    return `That schedule is ${Math.floor(bytes/1024)} KB. The limit is `
+         + `${Math.floor(MAX_BYTES/1024)} KB. Nothing was saved.`;
+  let ev=0,hw=0,sp=0,pr=0;
+  for(const raw of text.replace(/\r\n/g,"\n").split("\n")){
+    const t=raw.trim();
+    if(t.startsWith("@event"))ev++;
+    else if(t.startsWith("@hw"))hw++;
+    else if(t.startsWith("@sport"))sp++;
+    else if(t.startsWith("@project"))pr++;
+  }
+  if(ev>MAX_EVENTS)   return `You have ${ev} events; the limit is ${MAX_EVENTS}. Remove a few and save again. Nothing was saved.`;
+  if(hw>MAX_HW)       return `You have ${hw} homework items; the limit is ${MAX_HW}. Remove a few and save again. Nothing was saved.`;
+  if(sp>MAX_SPORTS)   return `You have ${sp} sports; the limit is ${MAX_SPORTS}. Remove a few and save again. Nothing was saved.`;
+  if(pr>MAX_PROJECTS) return `You have ${pr} projects; the limit is ${MAX_PROJECTS}. Finish or remove a few and save again. Nothing was saved.`;
+  return null;
+}
+
+function flashLine(msg, cls){
+  let el=document.getElementById("localFlash");
+  if(!el){
+    el=document.createElement("div");
+    el.id="localFlash"; el.className="flash "+cls;
+    el.style.cssText="margin-bottom:.9rem";
+    const h=document.querySelector("h1");
+    h.parentNode.insertBefore(el, h.nextSibling);
+  }
+  el.className="flash "+cls;
+  el.textContent=msg;
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+document.getElementById("schedForm").addEventListener("submit",e=>{
+  const text = (mode==="text") ? document.getElementById("rawText").value : formToText();
+  document.getElementById("schedule_text").value=text;
+  if(!LOCAL) return;
+  e.preventDefault();
+  const problem = textProblem(text);
+  if(problem){ DIRTY=true; flashLine(problem, "error"); return; }
+  try{ localStorage.setItem(LS_KEY, text); }
+  catch(err){
+    DIRTY=true;
+    flashLine("This browser refused to save (private window, or its storage is "
+             +"full). Nothing was saved. Copy your text out before you leave "
+             +"this page.", "error");
+    return;
+  }
+  DIRTY=false;
+  flashLine("Saved in this browser.", "ok");
+});
+
+/* ---------------- local-only buttons ---------------- */
+if(LOCAL){
+  /* The account version links to a server route that reads the database row.
+     Here the text is already in the page. */
+  document.getElementById("dlBtn").onclick=()=>{
+    const text=(mode==="text")?document.getElementById("rawText").value:formToText();
+    const blob=new Blob([text],{type:"text/plain;charset=utf-8"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    const d=new Date(), p=n=>String(n).padStart(2,"0");
+    a.download=`schedule-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}.txt`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 30000);
+  };
+}
+</script>
+{% endblock %}

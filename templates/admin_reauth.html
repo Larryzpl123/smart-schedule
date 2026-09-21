@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Admin · confirm{% endblock %}
+{% block body %}
+<h1>Type the admin password again</h1>
+<p class="hint" style="margin-bottom:1rem;line-height:1.6">
+  You are already signed in. This one action can either hand over every
+  account's data or destroy some of it, so it asks again. Ordinary admin work
+  does not: a page that demands a password every few minutes is a page whose
+  password ends up short and written on something.<br>
+  Once confirmed, it stays confirmed for ten minutes.
+</p>
+<form method="post">
+  <label>Admin password</label>
+  <input type="password" name="password" autofocus autocomplete="current-password">
+  <button type="submit">Confirm</button>
+</form>
+<div class="links"><a href="{{ url_for('admin_home') }}">← Back, don't do it</a></div>
+{% endblock %}

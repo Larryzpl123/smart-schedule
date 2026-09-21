@@ -1,0 +1,5 @@
+Flask>=3.0
+pdfplumber>=0.11
+# Encrypts the backup you download from /admin. Without it the export is
+# refused rather than handing over every schedule in plain text.
+cryptography>=42

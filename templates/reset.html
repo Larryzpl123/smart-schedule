@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Reset password{% endblock %}
+{% block body %}
+<h1>Set a new password</h1>
+<form method="post">
+  <input type="hidden" name="email" value="{{ email }}">
+  <label>Reset code (emailed to {{ email }})</label>
+  <input name="code" inputmode="numeric" maxlength="6" required>
+  <label>New password (min 6 chars)</label>
+  <input name="password" type="password" required>
+  <button type="submit">Update password</button>
+</form>
+{% endblock %}

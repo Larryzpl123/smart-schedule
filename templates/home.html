@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}SSA Smart Schedule{% endblock %}
+{% block cardclass %}wide{% endblock %}
+{% block body %}
+<h1>Your week, on the 8 day rotation</h1>
+
+<div class="hint" style="margin-top:0;line-height:1.7">
+  Enter your schedule once, or upload the PDF from Veracross, and this lays out
+  your actual week: rotation letters, lunch tracks, Wednesday timings, special
+  schedules and no-school days from the published calendar.
+  <br>
+  There are two ways to use it. They are the same app; the only difference is
+  where your schedule is kept.
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));
+            gap:.8rem;margin-top:1.1rem">
+
+  <div style="background:var(--panel2);border:1px solid var(--line);
+              border-radius:10px;padding:1rem;display:flex;flex-direction:column">
+    <div style="font-size:.95rem;font-weight:600">No account</div>
+    <div style="font-size:.78rem;color:var(--ink-dim);line-height:1.6;margin-top:.4rem;flex:1">
+      Your schedule is kept <b>in this browser</b>. Nothing is sent to us and
+      nothing is stored on our server, so there is nothing of yours for us to
+      lose or look at. No email, no verification code, no password.
+      <br><br>
+      The cost: it lives in one browser on one device, and clearing your
+      browsing data deletes it. On an iPhone you need to add it to your Home
+      Screen, which the app will walk you through.
+    </div>
+    <a class="btn" href="{{ url_for('local_intro') }}"
+       style="margin-top:.9rem">Use it without an account</a>
+  </div>
+
+  <div style="background:var(--panel2);border:1px solid var(--line);
+              border-radius:10px;padding:1rem;display:flex;flex-direction:column">
+    <div style="font-size:.95rem;font-weight:600">With an account</div>
+    <div style="font-size:.78rem;color:var(--ink-dim);line-height:1.6;margin-top:.4rem;flex:1">
+      Your schedule is on <b>every device you log in on</b>, and it survives a
+      new phone or a cleared browser. Version history keeps your earlier
+      versions in case you paste over something.
+      <br><br>
+      The cost: the text is stored on our server, where an administrator could
+      in principle reach it. Sign up needs a
+      <code>@shadysideacademy.org</code> address and a code sent to it.
+    </div>
+    <a class="btn" href="{{ url_for('login') }}"
+       style="margin-top:.9rem;background:var(--panel2);color:var(--ink);
+              border:1px solid var(--line)">Log in or sign up</a>
+  </div>
+
+</div>
+
+<div class="hint" style="margin-top:1rem;line-height:1.7">
+  You are not stuck with the one you pick. Both read and write the same file,
+  so you can export from either and import into the other whenever you want.
+</div>
+
+<div class="links" style="margin-top:1.2rem">
+  <a href="{{ url_for('sample') }}">See a sample week first</a>
+  <span style="color:var(--ink-dim)">(no account needed)</span>
+</div>
+{% endblock %}

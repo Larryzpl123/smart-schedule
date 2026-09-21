@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# Anything that identifies a real student, or that unlocks the live site,
+# stays out. Adding to this list is cheap; getting something back out of git
+# history is not.
+# ---------------------------------------------------------------------------
+
+# Real Veracross schedule PDFs. These contain students' home addresses and
+# parents' phone numbers. Never commit one, not even to a private repo.
+samples/
+*.pdf
+
+# The database is every account and every schedule.
+*.db
+*.db-journal
+*.sqlite
+pre-import_*.json
+backups/
+
+# The live WSGI file holds SECRET_KEY, ADMIN_PASSWORD, BACKUP_KEY and the SMTP
+# password. Only the .example version belongs here.
+wsgi_pythonanywhere.py
+wsgi_*.py
+!wsgi_pythonanywhere.example.py
+.env
+
+# Build output
+push/
+push.zip
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS
+.DS_Store

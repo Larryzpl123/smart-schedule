@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Admin · shared schedule{% endblock %}
+{% block cardclass %}wide{% endblock %}
+{% block body %}
+<h1>School-wide schedule.txt</h1>
+<form method="post">
+  <textarea name="content" spellcheck="false">{{ content }}</textarea>
+  <button type="submit">Save shared schedule</button>
+</form>
+{% if errors %}
+<div class="flash error" style="font-size:.78rem;line-height:1.6">
+  <b>Not saved.</b> Your text is still in the box below, so nothing is lost.
+  <ul style="margin:.4rem 0 0 1rem">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% if warnings %}
+<div class="flash" style="font-size:.78rem;line-height:1.6;background:var(--panel2);border:1px solid var(--line)">
+  <b>Worth a look:</b>
+  <ul style="margin:.4rem 0 0 1rem">{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<div class="hint">This is the rotation, community-time, finals and Wednesday remap shared by everyone. It is checked before saving: anything that would break the timetable is refused, and the version you replace is kept as a .bak next to it.</div>
+<div class="links"><a href="{{ url_for('admin_home') }}">← Back to admin dashboard</a></div>
+{% endblock %}

@@ -1,0 +1,112 @@
+# SSA Senior School - shared schedule definitions (same for all SS students)
+# Loaded by index.html alongside each student's personal file.
+
+# ---- Community Time block (10:05-10:30 on normal days) ----
+# Name varies by weekday: Mon=Assembly, Tue=Advisory, Wed=none, Thu=Club Time, Fri=Assembly
+@community time = 10:05-10:30
+@community Mon = Assembly
+@community Tue = Advisory
+@community Wed =
+@community Thu = Club Time
+@community Fri = Assembly
+
+# Immersive community time (10:00-10:30): Wed=Advisory, very first immersive day=Assembly, else Community Time
+@imm_community time = 10:00-10:30
+@imm_community default = Community Time
+@imm_community Wed = Advisory
+@imm_community first = Assembly
+
+# Immersive term daily blocks: label - HH:MM-HH:MM
+@imm_block Morning Session 1 - 08:30-10:00
+@imm_block Community Time - 10:00-10:30
+@imm_block Morning Session 2 - 10:30-12:00
+# Lunch removed here too, same reasoning as the Convocation one.
+# NOTE: this line used to read "Lunch A" -- that A is a clue that
+# immersive has an A and a B schedule (see HANDOFF).
+@imm_block Afternoon Session - 13:00-15:00
+
+# ---- 8-day rotation (shared by all SS students) ----
+# period:HH:MM-HH:MM (24h). Personal files just list which classes fill A-H.
+# Times with a "|" have two lunch tracks: Early|Late. Only the midday period
+# differs; a course says which track it is on its own line. @latearly below is
+# the old school-wide guess, kept only so schedules saved before that change
+# still render.
+@latearly A=La B=Ea C=La D=Ea E=Ea F=La G=La H=Ea
+@day 1 = A:08:15-09:05 B:09:10-10:00 C:10:35-11:45 D:11:50-12:40|12:25-13:15 E:13:20-14:10 F:14:15-15:00
+@day 2 = G:08:15-09:05 D:09:10-10:00 E:10:35-11:45 H:11:50-12:40|12:25-13:15 A:13:20-14:10 B:14:15-15:00
+@day 3 = F:08:15-09:05 H:09:10-10:00 A:10:35-11:45 C:11:50-12:40|12:25-13:15 G:13:20-14:10 D:14:15-15:00
+@day 4 = B:08:15-09:05 C:09:10-10:00 G:10:35-11:45 E:11:50-12:40|12:25-13:15 F:13:20-14:10 H:14:15-15:00
+@day 5 = D:08:15-09:05 E:09:10-10:00 F:10:35-11:45 A:11:50-12:40|12:25-13:15 B:13:20-14:10 C:14:15-15:00
+@day 6 = H:08:15-09:05 A:09:10-10:00 B:10:35-11:45 G:11:50-12:40|12:25-13:15 D:13:20-14:10 E:14:15-15:00
+@day 7 = C:08:15-09:05 G:09:10-10:00 D:10:35-11:45 F:11:50-12:40|12:25-13:15 H:13:20-14:10 A:14:15-15:00
+@day 8 = E:08:15-09:05 F:09:10-10:00 H:10:35-11:45 B:11:50-12:40|12:25-13:15 C:13:20-14:10 G:14:15-15:00
+
+# Dismissal lines (bold marker): daytype = HH:MM
+@dismiss normal = 15:00
+@dismiss immersive = 15:00
+@dismiss wednesday = 15:25
+
+# Wednesday late-start remap: normalStart => wedStart-wedEnd
+@wed 08:15 => 09:35-10:25
+@wed 09:10 => 10:30-11:20
+@wed 10:35 => 11:25-12:15
+@wed 11:50 => 12:20-13:10
+@wed 12:25 => 12:45-13:35
+@wed 13:20 => 13:40-14:30
+@wed 14:15 => 14:35-15:25
+
+# ---- Semester finals / final assessments ----
+# Grade-aware. Format: @finals MM.DD | grades | Label - HH:MM-HH:MM
+# grades = ALL, or a list like 9,10 or 11,12. App shows blocks matching student's grade.
+@finals 12.17 | 11,12 | History Assessment - 08:30-10:00
+@finals 12.17 | 9,10 | English Assessment - 08:30-10:00
+@finals 12.17 | ALL | Computer Science Assessment - 11:00-12:30
+@finals 12.17 | ALL | World Language Assessment - 13:30-15:00
+@finals 12.18 | 11,12 | English Assessment - 08:00-10:00
+@finals 12.18 | 9,10 | History Assessment - 08:00-10:00
+@finals 12.18 | ALL | Tech & Design Assessment - 11:00-12:30
+@finals 12.18 | ALL | Math Assessment - 13:00-15:00
+@finals 12.19 | ALL | Science Assessment - 08:30-10:00
+@finals 12.19 | ALL | Art Assessment - 11:00-12:30
+@finals 12.19 | ALL | Conflict / Make-up - 13:30-15:00
+
+# ---- Semester date ranges (shared by everyone; students pick from these) ----
+# @semester YEAR | Fall|Spring | MM.DD-MM.DD
+@semester 2025-2026 | Fall | 08.26-01.16
+@semester 2025-2026 | Spring | 01.20-06.30
+@semester 2026-2027 | Fall | 08.25-01.15
+@semester 2026-2027 | Spring | 01.19-06.30
+
+# ---- School-wide / whole-grade events (admin edits these here) ----
+# @public YYYY-MM-DD - Label - HH:MM-HH:MM - grades - color
+# grades = ALL, or a list like 11,12 (same rule as @finals above).
+# Everyone sees these without adding anything to their own schedule.
+# @public 2026-10-17 - Homecoming - 12:00-16:00 - ALL - pink
+
+# ---- Special day schedules (Convocation, Closing Exercises...) ----
+# A day marked "special" in the calendar file uses the timetable named here
+# instead of the A-H rotation. It does NOT consume a cycle day.
+# @special LABEL | HH:MM-HH:MM | what | grades
+#   grades = ALL, or a list like 9,10,11 (same rule as @finals).
+#   "first-of-day N" as the label means: whatever class the student has in the
+#   FIRST period of cycle day N. Convocation gives every course a 25-minute
+#   taster, one per rotation day, and the eight first periods happen to be
+#   eight different letters -- so this is read off @day rather than hardcoded,
+#   and it stays right if the school ever changes the rotation.
+@special Convocation | 08:15-08:25 | Designated Rooms | 9,10,11
+@special Convocation | 08:15-08:25 | Report to Hillman Terrace | 12
+@special Convocation | 08:25-08:35 | Walk to Convocation and be seated | 9,10,11
+@special Convocation | 08:35-09:15 | Convocation - Senior Quad or Mellon Gym | ALL
+@special Convocation | 09:20-09:50 | Designated Rooms - Pouch & Fob Training | ALL
+@special Convocation | 09:55-10:20 | first-of-day 1 | ALL
+@special Convocation | 10:25-10:50 | first-of-day 2 | ALL
+@special Convocation | 10:55-11:20 | first-of-day 3 | ALL
+@special Convocation | 11:25-11:50 | first-of-day 4 | ALL
+# 11:50-13:00 is the lunch break. Deliberately NOT drawn as a block: on a
+# normal day lunch is the Early/Late split that each course line already
+# carries, so a single Lunch band would be wrong for half the school. The gap
+# speaks for itself.
+@special Convocation | 13:05-13:30 | first-of-day 5 | ALL
+@special Convocation | 13:35-14:00 | first-of-day 6 | ALL
+@special Convocation | 14:05-14:30 | first-of-day 7 | ALL
+@special Convocation | 14:35-15:00 | first-of-day 8 | ALL

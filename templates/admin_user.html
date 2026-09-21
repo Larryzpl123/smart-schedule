@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Admin · {{ u['email'] }}{% endblock %}
+{% block cardclass %}wide{% endblock %}
+{% block body %}
+<h1>{{ u['name'] or u['email'] }}</h1>
+<div class="hint" style="margin-bottom:1rem">
+  Email: {{ u['email'] }}<br>
+  Username: {{ u['username'] or '-' }} · Class: {{ u['class_year'] or '-' }} · Grade: {{ u['grade'] or '-' }}<br>
+  Verified: {{ 'yes' if u['verified'] else 'no' }} ·
+  Joined: {{ u['created_at'] }}
+</div>
+<label>Their schedule</label>
+<div style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.7rem;font-size:.8rem;line-height:1.7">
+  {% if has_schedule %}This account has a schedule.{% else %}This account has no schedule yet.{% endif %}
+  <div class="hint" style="margin:.5rem 0 0;line-height:1.6">
+    That is all this page shows about it &mdash; not the contents, not its
+    size, not how many classes or events are in it. Nothing an admin does here
+    needs any of that (verifying, resetting a password and deleting work off
+    the account, not its schedule), and a leaked admin password should not be
+    a way to learn even the shape of somebody's week. Totals and averages,
+    attached to nobody, are on the disk panel of the main admin page.
+    <br>The schedule is still in the database: this protects against somebody
+    <b>else</b> getting the admin password, not against whoever holds the
+    hosting account. Only end-to-end encryption with each student's own
+    password would do that, and it would make a forgotten password mean
+    permanently lost data.
+  </div>
+</div>
+
+<!-- Both of these are destructive, so they are here rather than one click
+     away in the accounts table, and they are kept apart from each other. -->
+<form method="post" action="{{ url_for('admin_user_reset_password', uid=u['id']) }}"
+      onsubmit="return confirm('Send a reset code to the admin email?\n\nNothing changes until you enter that code on the next screen.')">
+  <button type="submit" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line)">Reset password…</button>
+</form>
+<p class="hint" style="margin:.4rem 0 1.6rem;line-height:1.6">
+  For when a student cannot log in and the reset email never arrived. A code is
+  first emailed to the admin address; only after you enter it does the password
+  change. That is on purpose &mdash; a reset lets an admin log in as the student
+  and read their schedule, so it is tied to a mailbox the admin password alone
+  cannot reach. The old password stops working once the reset completes, and
+  the temporary one is shown once.
+</p>
+
+<form method="post" action="{{ url_for('admin_user_delete', uid=u['id']) }}"
+      onsubmit="return confirm('Delete this account permanently?')">
+  <button type="submit" style="background:var(--bad);color:#fff">Delete account</button>
+</form>
+<div class="links"><a href="{{ url_for('admin_home') }}">← Back to all accounts</a></div>
+{% endblock %}

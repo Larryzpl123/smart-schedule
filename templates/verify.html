@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Verify{% endblock %}
+{% block body %}
+<h1>Enter your code</h1>
+<form method="post">
+  <input type="hidden" name="email" value="{{ email }}">
+  <label>6-digit code sent to {{ email }}</label>
+  <input name="code" inputmode="numeric" maxlength="6" placeholder="123456" required>
+  <button type="submit">Verify</button>
+</form>
+<form method="post" action="{{ url_for('verify_resend') }}" style="margin-top:.4rem">
+  <input type="hidden" name="email" value="{{ email }}">
+  <button type="submit" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line);font-size:.78rem;padding:.5rem">Resend code</button>
+</form>
+<div class="hint">Codes expire 15 minutes after they're sent.</div>
+{% endblock %}

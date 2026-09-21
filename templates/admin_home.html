@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+{% block title %}Admin · accounts{% endblock %}
+{% block cardclass %}wide{% endblock %}
+{% block body %}
+<h1>Admin dashboard</h1>
+<form method="get" style="margin-bottom:.8rem">
+  <input name="q" value="{{ q }}" placeholder="Search name / email / username / class"
+         autocomplete="off" style="width:60%">
+  <button type="submit" style="width:auto;display:inline-block;margin:0 0 0 .4rem">Search</button>
+  {% if q %}<a href="{{ url_for('admin_home') }}" class="btn" style="width:auto;display:inline-block;margin:0 0 0 .4rem;background:var(--panel2);color:var(--ink)">Clear</a>{% endif %}
+</form>
+<div class="hint" style="margin-bottom:1rem">
+  {{ total }} accounts · {{ verified }} verified · {{ with_sched }} have a schedule
+  {% if q %}· showing {{ users|length }} match(es) for "{{ q }}"{% endif %}
+  &nbsp;|&nbsp; <a href="{{ url_for('admin_shared') }}" style="color:var(--accent)">Edit shared schedule.txt</a>
+  &nbsp;|&nbsp; <a href="{{ url_for('admin_logout') }}" style="color:var(--accent)">Admin log out</a>
+</div>
+
+{% if email_on %}
+<div class="{{ 'flash error' if sends_today >= max_codes else 'hint' }}"
+     style="margin-bottom:1rem;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+  <span style="flex:1;min-width:220px">
+    {% if sends_today >= max_codes %}
+      <b>Daily email cap reached ({{ sends_today }}/{{ max_codes }}).</b>
+      No more verification or reset codes will be sent until this resets.
+    {% else %}
+      Verification emails sent in the last 24h: <b>{{ sends_today }}</b> / {{ max_codes }}
+      &nbsp;(Gmail's own ceiling is 500/day)
+    {% endif %}
+  </span>
+  {% if sends_today > 0 %}
+  <form method="post" action="{{ url_for('admin_reset_send_cap') }}" style="margin:0"
+        onsubmit="return confirm('Reset the daily email counter to 0?')">
+    <button type="submit" style="width:auto;margin:0;padding:.4rem .8rem;font-size:.72rem;background:var(--panel2);color:var(--ink);border:1px solid var(--line)">Reset counter</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="{{ 'hint' if last_backup else 'flash error' }}"
+     style="margin-bottom:1rem;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+  <span style="flex:1;min-width:220px">
+    {% if last_backup %}
+      Automatic snapshot: <code>{{ last_backup }}</code>
+      ({{ backup_age }}h ago, kept in <code>{{ backup_dir }}</code>).
+      A new one is written whenever you open this page and the last is over a day old.
+    {% else %}
+      <b>No automatic snapshot yet.</b> One should appear as soon as this page finishes loading.
+    {% endif %}
+  </span>
+  <form method="post" action="{{ url_for('admin_backup_now') }}" style="margin:0">
+    <button type="submit" style="width:auto;margin:0;padding:.4rem .8rem;font-size:.72rem;background:var(--panel2);color:var(--ink);border:1px solid var(--line)">Snapshot now</button>
+  </form>
+</div>
+
+{% if storage and not storage.error %}
+<details style="margin-bottom:1rem;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.6rem .8rem">
+  <summary style="cursor:pointer;font-size:.78rem">
+    Disk: <b>{{ storage.used_mb }} MB</b> used of {{ storage.quota_mb|int }} MB
+    &middot; worst case with a full set of snapshots
+    <b style="color:var(--{{ 'good' if storage.ok else 'bad' }})">{{ storage.worst_mb }} MB</b>
+  </summary>
+  <div style="font-size:.74rem;color:var(--ink-dim);line-height:1.7;margin-top:.6rem">
+    Database <code>{{ '%.2f'|format(storage.db_bytes / 1000000) }} MB</code>
+    &middot; snapshots <code>{{ storage.backup_count }}</code> file{{ '' if storage.backup_count == 1 else 's' }},
+    <code>{{ '%.2f'|format(storage.backup_bytes / 1000000) }} MB</code>
+    (capped at {{ storage.keep }} files or {{ storage.cap_mb|int }} MB, whichever comes first).<br>
+    {{ storage.users }} account(s), {{ storage.filled }} with a schedule.
+    <b>Measured</b> average schedule text {{ storage.avg_text }} bytes
+    <span style="opacity:.8">(among the {{ storage.filled }} that have one
+    &mdash; counting the empty accounts as zero would answer a different
+    question from the projection below)</span>,
+    largest {{ storage.max_text }} bytes.<br>
+    Version history <code>{{ storage.hist_rows }}</code> row{{ '' if storage.hist_rows == 1 else 's' }},
+    <code>{{ '%.2f'|format(storage.hist_bytes / 1000000) }} MB</code>
+    &mdash; each student keeps at most {{ storage.history_keep }} earlier
+    versions of their own schedule (the newest few, then one a day going back),
+    and only a Save on <code>/edit</code> or a calendar import cuts one. Ticking
+    a box or adding one line on the grid does not.
+    Worst case that is {{ storage.hist_per_user }} bytes a student, so about
+    {{ storage.per_user }} bytes per account with the rest of the row.<br>
+    History is deliberately <b>not</b> in the snapshots: it is a convenience
+    ladder, not primary data, and carrying it would multiply every snapshot by
+    {{ storage.history_keep + 1 }}.<br>
+    Every snapshot holds every account, so snapshots are the part that grows:
+    <table style="margin-top:.4rem;font-size:.72rem">
+      <tr style="color:var(--ink-dim)"><th style="text-align:left;padding-right:1rem">accounts</th>
+        <th style="text-align:left;padding-right:1rem">database</th>
+        <th style="text-align:left;padding-right:1rem">one snapshot</th>
+        <th style="text-align:left">snapshots kept</th></tr>
+      {% for p in storage.projected %}
+      <tr><td style="padding-right:1rem">{{ p.users }}</td>
+          <td style="padding-right:1rem">{{ p.db_mb }} MB</td>
+          <td style="padding-right:1rem">{{ p.snap_mb }} MB</td>
+          <td>{{ p.kept_mb }} MB</td></tr>
+      {% endfor %}
+    </table>
+    Projected from the average above, not from a guess. The average climbs as
+    people add homework and projects, so this recomputes every time you open
+    the page. If the last column ever approaches the quota, lower
+    <code>BACKUP_KEEP</code> or <code>BACKUP_MAX_MB</code> in the WSGI file.
+    {% if backup_dir and 'schedule-backend' in backup_dir %}
+    <div style="color:var(--bad);margin-top:.5rem">
+      Snapshots are being written inside the code folder
+      (<code>{{ backup_dir }}</code>). Nothing deletes them today, but the code
+      folder is the one you unzip over on every deploy, so one careless
+      "delete then re-upload" takes the backups with it. Set
+      <code>os.environ["BACKUP_DIR"] = "/home/smartschedule/data/backups"</code>
+      in the WSGI file and move the existing files there.
+    </div>
+    {% endif %}
+  </div>
+</details>
+{% endif %}
+
+<div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
+  <a class="btn" href="{{ url_for('admin_export') }}"
+     style="width:auto;margin:0;padding:.5rem .9rem;font-size:.78rem">
+     ⭳ Export all data (encrypted)</a>
+  <a class="btn" href="{{ url_for('admin_import') }}"
+     style="width:auto;margin:0;padding:.5rem .9rem;font-size:.78rem;
+            background:var(--panel2);color:var(--ink);border:1px solid var(--line)">
+     ⭱ Restore from a backup</a>
+  <span class="hint" style="margin:0;flex:1;min-width:16rem">
+    Snapshots above live on the same server, so keep the occasional
+    downloaded copy somewhere else too. The download is encrypted with
+    <code>BACKUP_KEY</code>
+    {%- if backup_key_set %} (set){% else %}<b style="color:var(--bad)"> &mdash; NOT SET, so exporting is refused</b>{% endif %};
+    open it with <code>decrypt_backup.py</code>. Both of these ask for the
+    admin password again.</span>
+</div>
+
+<details style="margin-bottom:1rem;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.6rem .8rem">
+  <summary style="cursor:pointer;font-size:.78rem">
+    Admin activity &middot; last {{ admin_log|length }} shown
+    {%- set fails = admin_log | selectattr('event', 'equalto', 'login_fail') | list | length %}
+    {%- if fails %} &middot; <b style="color:var(--bad)">{{ fails }} failed sign-in{{ '' if fails == 1 else 's' }} recently</b>{% endif %}
+  </summary>
+  <table style="width:100%;border-collapse:collapse;font-size:.72rem;margin-top:.6rem">
+    {% for r in admin_log %}
+    <tr style="border-bottom:1px solid var(--line)">
+      <td style="padding:.3rem .3rem;white-space:nowrap;color:var(--ink-dim)">{{ r['ts'] }}</td>
+      <td style="padding:.3rem .3rem;white-space:nowrap">{{ r['event'] }}</td>
+      <td style="padding:.3rem .3rem">{{ r['ip'] }}{% if r['fwd'] %} / {{ r['fwd'] }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="hint" style="margin:.5rem 0 0;line-height:1.6">
+    A sign-in from an address and browser never seen before also sends you an
+    email. <a href="{{ url_for('admin_log_page') }}">See all of it →</a>
+  </div>
+</details>
+{% if mail_problem %}
+<div class="flash error" style="margin-bottom:1rem;font-size:.78rem;line-height:1.6">
+  <b>Codes are probably being filtered before they arrive.</b><br>{{ mail_problem }}
+</div>
+{% endif %}
+
+{% if pdf_problem %}
+<div class="flash error" style="margin-bottom:1rem;font-size:.78rem;line-height:1.6">
+  <b>PDF import is not working.</b><br>{{ pdf_problem }}
+</div>
+{% endif %}
+
+<details style="margin-bottom:1rem;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.7rem">
+  <summary style="cursor:pointer;font-size:.8rem">Fix the cycle day (after a snow day)</summary>
+  <div class="hint" style="margin:.6rem 0">
+    The 8-day rotation can't be worked out from the calendar alone: an unplanned
+    closure shifts it and nothing tells the app. If the schedule is showing the
+    wrong cycle day, look up what day it really is and record it here. Every
+    school day after this date is re-counted from it; earlier dates are untouched.
+  </div>
+  <form method="post" action="{{ url_for('admin_anchor') }}"
+        style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap">
+    <div><div class="hint" style="margin:0 0 .2rem">Date</div>
+      <input type="date" name="date" value="{{ today }}" required
+             style="width:auto;padding:.45rem"></div>
+    <div><div class="hint" style="margin:0 0 .2rem">really is cycle day</div>
+      <select name="day" style="width:auto;padding:.45rem">
+        {% for d in range(1,9) %}<option>{{ d }}</option>{% endfor %}
+      </select></div>
+    <button type="submit" style="width:auto;margin:0;padding:.5rem .9rem;font-size:.78rem">Save anchor</button>
+  </form>
+  <div class="hint" style="margin-top:.7rem">
+    Anchors on file for this school year:
+    {% if anchors %}{% for d, n in anchors %}<code>{{ d }} = Day {{ n }}</code>{{ ", " if not loop.last }}{% endfor %}
+    {% else %}<b style="color:var(--bad)">none, so the cycle is a guess until you add one</b>{% endif %}
+  </div>
+</details>
+
+<details style="margin-bottom:1rem;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.7rem">
+  <summary style="cursor:pointer;font-size:.8rem">Change one day's community block (class meeting, assembly…)</summary>
+  <div class="hint" style="margin:.6rem 0">
+    Normally the community slot follows the day of the week (Thu = Club Time).
+    Use this when one specific date is different, such as a monthly class/form meeting
+    on a Thursday, say. Leave the label empty to remove the block for that day.
+    Times are optional; blank keeps the usual community slot.
+  </div>
+  <form method="post" action="{{ url_for('admin_community_on') }}"
+        style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap">
+    <div><div class="hint" style="margin:0 0 .2rem">Date</div>
+      <input type="date" name="date" value="{{ today }}" required
+             style="width:auto;padding:.45rem"></div>
+    <div><div class="hint" style="margin:0 0 .2rem">is</div>
+      <input name="label" placeholder="Class Meeting"
+             style="width:12rem;padding:.45rem"></div>
+    <div><div class="hint" style="margin:0 0 .2rem">time (optional)</div>
+      <input name="times" placeholder="10:05-10:45"
+             style="width:8rem;padding:.45rem"></div>
+    <button type="submit" style="width:auto;margin:0;padding:.5rem .9rem;font-size:.78rem">Save</button>
+  </form>
+  <div class="hint" style="margin-top:.7rem">
+    Overrides on file for this school year:
+    {% if comm_ons %}{% for d, l in comm_ons %}<code>{{ d }} = {{ l or "(none)" }}</code>{{ ", " if not loop.last }}{% endfor %}
+    {% else %}none yet{% endif %}
+  </div>
+</details>
+
+<details style="margin-bottom:1rem;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.7rem">
+  <summary style="cursor:pointer;font-size:.8rem">School-wide event (everyone sees it, nobody has to add it)</summary>
+  <div class="hint" style="margin:.6rem 0">
+    For things the whole school or a whole grade is expected at: a tailgate, a
+    pep rally, picture day. Students see it on their own schedule without doing
+    anything. Grades is ALL, or a list like 11,12.
+  </div>
+  <form method="post" action="{{ url_for('admin_public') }}"
+        style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap">
+    <div><div class="hint" style="margin:0 0 .2rem">Date</div>
+      <input type="date" name="date" value="{{ today }}" required
+             style="width:auto;padding:.45rem"></div>
+    <div style="flex:1;min-width:11rem"><div class="hint" style="margin:0 0 .2rem">What</div>
+      <input name="label" placeholder="UPA All Academy Tailgate" required
+             style="width:100%;padding:.45rem"></div>
+    <div><div class="hint" style="margin:0 0 .2rem">From</div>
+      <input type="time" name="start" value="17:00" required
+             style="width:auto;padding:.45rem"></div>
+    <div><div class="hint" style="margin:0 0 .2rem">To</div>
+      <input type="time" name="end" value="19:00" required
+             style="width:auto;padding:.45rem"></div>
+    <div><div class="hint" style="margin:0 0 .2rem">Grades</div>
+      <input name="grades" value="ALL" style="width:5rem;padding:.45rem"></div>
+    <div><div class="hint" style="margin:0 0 .2rem">Colour</div>
+      <select name="color" style="width:auto;padding:.45rem">
+        {% for c in ["pink","teal","indigo","cyan","orange","gray","red","green","blue","yellow","purple"] %}
+        <option>{{ c }}</option>{% endfor %}
+      </select></div>
+    <button type="submit" style="width:auto;margin:0;padding:.5rem .9rem;font-size:.78rem">Add</button>
+  </form>
+  <div style="margin-top:.8rem">
+    {% if publics %}
+    <div class="hint" style="margin:0 0 .3rem">On the calendar now:</div>
+    {% for p in publics %}
+    <form method="post" action="{{ url_for('admin_public') }}"
+          style="display:flex;gap:.5rem;align-items:center;margin-top:.25rem;flex-wrap:wrap">
+      <input type="hidden" name="remove"
+             value="@public {{ p.date }} - {{ p.label }} - {{ p.time }} - {{ p.grades }} - {{ p.color }}">
+      <code style="font-size:.74rem">{{ p.date }} · {{ p.time }} · {{ p.label }}</code>
+      <span class="hint" style="margin:0">{{ p.grades }}</span>
+      <button type="submit" style="width:auto;margin:0;padding:.15rem .5rem;font-size:.68rem;background:var(--panel);color:var(--ink-dim);border:1px solid var(--line)">remove</button>
+    </form>
+    {% endfor %}
+    {% else %}<div class="hint" style="margin:0">None yet.</div>{% endif %}
+  </div>
+</details>
+
+<details style="margin-bottom:1rem;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.7rem"
+         {% if unverified %}open{% endif %}>
+  <summary style="cursor:pointer;font-size:.8rem">
+    Someone never got their code? Verify them here
+    {% if unverified %}<b style="color:var(--bad)"> ({{ unverified|length }} waiting)</b>{% endif %}
+  </summary>
+  <div class="hint" style="margin:.6rem 0">
+    School mail systems filter a lot of automated mail from outside addresses,
+    and there is no setting in this app that reliably fixes that. The code only
+    exists to prove the address belongs to a real SSA student, so if you know they
+    are, verifying them here does the same job. They keep the password they
+    chose when registering and can log in straight away.
+  </div>
+  <div class="hint" style="margin:.6rem 0">
+    Forgotten a password and the reset email never arrived either? Open the
+    account with <b>view</b> and use <b>reset password</b> there: it sets a
+    temporary password and shows
+    it to you once, to hand over in person.
+  </div>
+  {% if unverified %}
+  <div style="margin:.5rem 0 .8rem">
+    {% for u in unverified %}
+    <form method="post" action="{{ url_for('admin_user_verify', uid=u['id']) }}"
+          style="display:flex;gap:.5rem;align-items:center;margin-top:.3rem;flex-wrap:wrap">
+      <code style="font-size:.75rem">{{ u['email'] }}</code>
+      <span class="hint" style="margin:0">{{ u['name'] or '-' }}</span>
+      {% if u['verify_code'] %}
+      <span class="hint" style="margin:0">code <code>{{ u['verify_code'] }}</code></span>
+      {% endif %}
+      <button type="submit" style="width:auto;margin:0;padding:.3rem .7rem;font-size:.75rem">Verify</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <form method="post" action="{{ url_for('admin_verify_bulk') }}">
+    <div class="hint" style="margin:0 0 .2rem">Or paste addresses (they must have registered first):</div>
+    <textarea name="emails" rows="3" placeholder="27doej@shadysideacademy.org, 28smitha@shadysideacademy.org"
+              style="min-height:0;font-size:.76rem"></textarea>
+    <button type="submit" style="width:auto;margin:.5rem 0 0;padding:.4rem .8rem;font-size:.78rem">Verify these</button>
+  </form>
+</details>
+
+<table style="width:100%;border-collapse:collapse;font-size:.8rem">
+  <tr style="text-align:left;color:var(--ink-dim);border-bottom:1px solid var(--line)">
+    <th style="padding:.4rem">Class</th><th>Name</th><th>Email</th>
+    <th>Grade</th><th>Verified</th><th>Schedule</th><th></th>
+  </tr>
+  {% for u in users %}
+  <tr style="border-bottom:1px solid var(--line)">
+    <td style="padding:.4rem">{{ u['class_year'] or '-' }}</td>
+    <td>{{ u['name'] or '-' }}</td>
+    <td>{{ u['email'] }}</td>
+    <td>{{ u['grade'] or '-' }}</td>
+    <td>{% if u['verified'] %}✓{% else %}
+      <form method="post" action="{{ url_for('admin_user_verify', uid=u['id']) }}" style="margin:0">
+        <button type="submit" style="width:auto;margin:0;padding:.15rem .45rem;font-size:.68rem">verify</button>
+      </form>{% endif %}</td>
+    <td>{{ '✓' if (u['schedule_text'] or '').strip() else '-' }}</td>
+    <!-- "reset pw" used to sit right here, a few pixels from "view", and it
+         invalidates a student's password the moment it is clicked. One
+         destructive button next to one harmless link is a misclick waiting to
+         happen, so it lives on the account's own page now. -->
+    <td style="white-space:nowrap">
+      <a href="{{ url_for('admin_user', uid=u['id']) }}" style="color:var(--accent)">view</a>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

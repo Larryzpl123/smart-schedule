@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Admin · restore from backup{% endblock %}
+{% block cardclass %}wide{% endblock %}
+{% block body %}
+<h1>Restore from a backup</h1>
+
+<div class="flash error" style="margin-bottom:1rem">
+  <b>Export first.</b> Restoring can overwrite live accounts. Take a fresh
+  copy of what's in the database right now before you upload anything.
+  <a href="{{ url_for('admin_export') }}" style="color:var(--accent)">Download a backup now →</a>
+</div>
+
+<form method="post" enctype="multipart/form-data">
+  <label>Backup file (.json)</label>
+  <input type="file" name="backup" accept=".json,application/json" required>
+  <div class="hint">
+    Nothing is written yet. The next screen shows exactly which accounts
+    would be created and which would be overwritten, and you tick the ones
+    you want.
+  </div>
+  <button type="submit">Read the file and show me the differences</button>
+</form>
+
+<div class="links"><a href="{{ url_for('admin_home') }}">← Back to all accounts</a></div>
+{% endblock %}

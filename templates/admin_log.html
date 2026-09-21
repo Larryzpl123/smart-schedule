@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Admin · activity{% endblock %}
+{% block cardclass %}wide{% endblock %}
+{% block body %}
+<h1>Admin activity</h1>
+<div class="hint" style="margin-bottom:1rem;line-height:1.6">
+  The last {{ keep }} entries. This is how "did somebody else get in?" has an
+  answer.<br>
+  <b>"Seen from" is the real visitor.</b> PythonAnywhere's load balancer puts
+  the client's address in <code>X-Real-IP</code>, and that is what this column
+  and every rate limit use. <code>X-Forwarded-For</code> is shown beside it
+  only because it is occasionally useful to a person reading the log &mdash;
+  it is a list a client can inject into, so nothing in the app decides
+  anything from it.
+</div>
+<table style="width:100%;border-collapse:collapse;font-size:.76rem">
+  <tr style="text-align:left;color:var(--ink-dim);border-bottom:1px solid var(--line)">
+    <th style="padding:.4rem .3rem">When</th>
+    <th style="padding:.4rem .3rem">What</th>
+    <th style="padding:.4rem .3rem">Seen from</th>
+    <th style="padding:.4rem .3rem">X-Forwarded-For</th>
+    <th style="padding:.4rem .3rem">Browser</th>
+  </tr>
+  {% for r in rows %}
+  <tr style="border-bottom:1px solid var(--line)">
+    <td style="padding:.35rem .3rem;white-space:nowrap">{{ r['ts'] }}</td>
+    <td style="padding:.35rem .3rem;white-space:nowrap;color:var(--{{ 'bad' if 'fail' in r['event'] or 'refused' in r['event'] or r['event'] in ('delete_user','restore') else 'ink' }})">
+      {{ r['event'] }}{% if r['detail'] %} <span style="color:var(--ink-dim)">{{ r['detail'] }}</span>{% endif %}</td>
+    <td style="padding:.35rem .3rem">{{ r['ip'] }}</td>
+    <td style="padding:.35rem .3rem">{{ r['fwd'] or '-' }}</td>
+    <td style="padding:.35rem .3rem;color:var(--ink-dim);word-break:break-all">{{ (r['agent'] or '')[:70] }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% if not rows %}<p class="hint">Nothing recorded yet.</p>{% endif %}
+<div class="links"><a href="{{ url_for('admin_home') }}">← Back</a></div>
+{% endblock %}

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Import a calendar{% endblock %}
+{% block cardclass %}wide{% endblock %}
+{% block body %}
+<h1>What would you like to import?</h1>
+
+<div class="hint" style="margin-bottom:.8rem;line-height:1.6">
+  From <b>{{ filename }}</b>{% if calname %} &middot; &ldquo;{{ calname }}&rdquo;{% endif %}.
+  <b>{{ items|length }}</b> readable{% if skipped %}, <b>{{ skipped|length }}</b> that
+  this app has no way to store{% endif %}.<br>
+  This is a <b>one-time copy</b>. Nothing here links back to the original
+  calendar, so if a deadline moves in the file it will not move here.
+  Everything imported can be edited or deleted afterwards like anything else
+  you typed yourself.
+</div>
+
+{% if items %}
+<form method="post" action="{{ url_for('edit_import_ics_confirm') }}">
+  <div style="display:flex;gap:.5rem;margin-bottom:.6rem;flex-wrap:wrap;align-items:center">
+    <button type="button" class="tinybtn" onclick="pick(true)"
+            style="width:auto;margin:0;padding:.35rem .7rem;font-size:.74rem">Tick all</button>
+    <button type="button" class="tinybtn" onclick="pick(false)"
+            style="width:auto;margin:0;padding:.35rem .7rem;font-size:.74rem;background:var(--panel2);color:var(--ink)">Untick all</button>
+    <span class="hint" style="margin:0;font-size:.72rem" id="tally"></span>
+  </div>
+
+  <div style="overflow-x:auto">
+  <table style="width:100%;border-collapse:collapse;font-size:.78rem">
+    <tr style="text-align:left;color:var(--ink-dim);border-bottom:1px solid var(--line)">
+      <th style="padding:.4rem .3rem;width:2rem"></th>
+      <th style="padding:.4rem .3rem">When</th>
+      <th style="padding:.4rem .3rem">What</th>
+      <th style="padding:.4rem .3rem">Comes in as</th>
+    </tr>
+    {% for it in items %}
+    <tr style="border-bottom:1px solid var(--line)">
+      <td style="padding:.4rem .3rem;vertical-align:top">
+        <input type="checkbox" name="line" value="{{ it.line }}"
+               class="pickone" {% if it.default %}checked{% endif %}
+               style="width:auto;margin:0">
+      </td>
+      <td style="padding:.4rem .3rem;vertical-align:top;white-space:nowrap;color:var(--ink-dim)">
+        {{ it.when_human }}</td>
+      <td style="padding:.4rem .3rem;vertical-align:top">
+        {{ it.name }}
+        {% if it.already %}<div style="color:var(--good);font-size:.7rem">already in your schedule</div>{% endif %}
+        {% if it.note %}<div style="color:var(--ink-dim);font-size:.7rem">{{ it.note }}</div>{% endif %}
+      </td>
+      <td style="padding:.4rem .3rem;vertical-align:top;font-family:ui-monospace,Menlo,monospace;font-size:.68rem;color:var(--ink-dim);word-break:break-all">
+        {{ it.line }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+
+  <div class="hint" style="margin:.8rem 0;font-size:.74rem">
+    You have {{ have.events }} of {{ caps.events }} events and
+    {{ have.projects }} of {{ caps.projects }} projects. Going over either
+    limit refuses the whole import rather than taking half of it.
+  </div>
+
+  <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap">
+    <button type="submit" style="width:auto;padding:.55rem 1.1rem">Import the ticked ones</button>
+    <a class="btn" href="{{ url_for('edit') }}" style="width:auto;padding:.55rem 1.1rem;background:var(--panel2);color:var(--ink)">Cancel</a>
+  </div>
+</form>
+{% else %}
+  <div class="flash error">Nothing in that file could be imported.</div>
+  <div class="links"><a href="{{ url_for('edit') }}">&larr; Back to my schedule</a></div>
+{% endif %}
+
+{% if skipped %}
+<h2 style="font-size:.95rem;margin-top:1.6rem">Left out ({{ skipped|length }})</h2>
+<div class="hint" style="margin-bottom:.5rem;font-size:.74rem">
+  Listed rather than dropped quietly, so you know what to add by hand.
+</div>
+<table style="width:100%;border-collapse:collapse;font-size:.76rem">
+  {% for sk in skipped %}
+  <tr style="border-bottom:1px solid var(--line)">
+    <td style="padding:.35rem .3rem">{{ sk.name }}</td>
+    <td style="padding:.35rem .3rem;color:var(--ink-dim)">{{ sk.reason }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<script>
+function pick(on){document.querySelectorAll(".pickone").forEach(c=>c.checked=on);tally();}
+function tally(){
+  const n=document.querySelectorAll(".pickone:checked").length;
+  document.getElementById("tally").textContent=n+" ticked";
+}
+document.addEventListener("change",e=>{if(e.target.classList.contains("pickone"))tally();});
+tally();
+</script>
+{% endblock %}

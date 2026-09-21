@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Admin · reset code{% endblock %}
+{% block body %}
+<h1>Enter the code we emailed you</h1>
+<p class="hint" style="margin-bottom:1rem;line-height:1.6">
+  Resetting <b>{{ u['email'] }}</b>'s password is the one admin action that can
+  lead to reading their schedule (reset, then log in as them). It cannot be
+  fully prevented without end-to-end encryption &mdash; which would make a
+  forgotten password mean permanently lost data &mdash; so instead it needs a
+  code sent to the operator's own mailbox, which the admin password alone does
+  not reach.<br>
+  A code just went to the admin email address. It is good for ten minutes.<br>
+  <b>If you did not start this, do not enter anything</b> &mdash; and change
+  <code>ADMIN_PASSWORD</code>, because somebody else may have it.
+</p>
+<form method="post" action="{{ url_for('admin_user_reset_password_confirm', uid=u['id']) }}">
+  <label>Code from the email</label>
+  <input name="code" inputmode="numeric" autocomplete="one-time-code" autofocus
+         style="letter-spacing:.3em;font-size:1.1rem">
+  <button type="submit">Reset the password</button>
+</form>
+<div class="links"><a href="{{ url_for('admin_user', uid=u['id']) }}">← Cancel</a></div>
+{% endblock %}

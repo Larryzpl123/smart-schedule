@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Admin · confirm restore{% endblock %}
+{% block cardclass %}wide{% endblock %}
+{% block body %}
+<h1>Confirm what to restore</h1>
+
+<div class="hint" style="margin-bottom:1rem">
+  From <b>{{ filename }}</b> · exported {{ exported_at }}<br>
+  <span style="color:var(--good)">{{ n_new }} new</span> ·
+  <span style="color:var(--bad)">{{ n_conflict }} conflicting</span> ·
+  <span style="color:var(--ink-dim)">{{ n_same }} identical (nothing to do)</span>
+</div>
+
+{% if n_new == 0 and n_conflict == 0 %}
+  <div class="flash ok">
+    This backup matches the database exactly. There is nothing to restore.
+  </div>
+  <div class="links"><a href="{{ url_for('admin_home') }}">← Back to all accounts</a></div>
+{% else %}
+<form method="post" action="{{ url_for('admin_import_apply') }}"
+      onsubmit="return confirm('Write the ticked accounts into the database?')">
+
+  <div style="display:flex;gap:.5rem;margin-bottom:.6rem;flex-wrap:wrap">
+    <button type="button" class="tinybtn" onclick="pick('new',true)">Tick all new</button>
+    <button type="button" class="tinybtn" onclick="pick('conflict',true)">Tick all conflicts</button>
+    <button type="button" class="tinybtn" onclick="pick('',false)">Untick everything</button>
+  </div>
+
+  <table style="width:100%;border-collapse:collapse;font-size:.78rem">
+    <tr style="text-align:left;color:var(--ink-dim);border-bottom:1px solid var(--line)">
+      <th style="padding:.4rem;width:28px"></th>
+      <th>Email</th><th>Name</th><th style="width:90px">Status</th>
+      <th>What would change</th>
+    </tr>
+    {% for r in rows %}
+    <tr style="border-bottom:1px solid var(--line);
+               {% if r.status == 'same' %}opacity:.45{% endif %}">
+      <td style="padding:.4rem">
+        {% if r.status != 'same' %}
+          <input type="checkbox" name="apply" value="{{ r.email }}"
+                 class="pickbox" data-status="{{ r.status }}"
+                 {% if r.status == 'new' %}checked{% endif %} style="width:auto">
+        {% endif %}
+      </td>
+      <td>{{ r.email }}</td>
+      <td>{{ r.backup.name or '-' }}</td>
+      <td>
+        {% if r.status == 'new' %}<span style="color:var(--good)">new</span>
+        {% elif r.status == 'conflict' %}<span style="color:var(--bad)">conflict</span>
+        {% else %}<span style="color:var(--ink-dim)">identical</span>{% endif %}
+      </td>
+      <td style="color:var(--ink-dim)">
+        {% if r.status == 'new' %}
+          account created{% if (r.backup.schedule_text or '').strip() %} (with schedule){% endif %}
+        {% elif r.status == 'conflict' %}
+          overwrite: {{ r.changes|join(', ') }}
+          {% if 'schedule_text' in r.changes %}
+            <br><span style="color:var(--bad)">live schedule {{ (r.live['schedule_text'] or '')|length }} chars
+            → backup {{ (r.backup.schedule_text or '')|length }} chars</span>
+          {% endif %}
+        {% else %}-{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <div class="hint" style="margin-top:.8rem">
+    Conflicts are unticked by default. Before anything is written, a snapshot
+    of the current data is saved next to the database as
+    <code>pre-import_&lt;timestamp&gt;.json</code>.
+  </div>
+
+  <button type="submit">Write the ticked accounts</button>
+</form>
+
+<div class="links"><a href="{{ url_for('admin_import') }}">← Choose a different file</a></div>
+{% endif %}
+
+<style>
+  .tinybtn{width:auto;margin:0;padding:.35rem .7rem;font-size:.72rem;
+           background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
+</style>
+<script>
+function pick(status, on){
+  document.querySelectorAll(".pickbox").forEach(b=>{
+    if(!status || b.dataset.status===status) b.checked=on;
+  });
+}
+</script>
+{% endblock %}

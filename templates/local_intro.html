@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Local mode{% endblock %}
+{% block cardclass %}wide{% endblock %}
+{% block body %}
+<h1>Local mode</h1>
+
+<div class="hint" style="line-height:1.7;margin-top:0">
+  The same schedule app, with no account and no server. Your schedule is kept
+  in this browser's own storage. We never receive it, so we cannot lose it,
+  read it, or hand it to anyone. Nobody has to wait for a verification email
+  either.
+  <br><br>
+  The trade is real, so read the next bit before you type a term's worth of
+  homework into it.
+</div>
+
+<div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+            padding:.9rem;margin-top:1rem;font-size:.8rem;line-height:1.7">
+  <b>What you give up</b>
+  <ul style="margin:.5rem 0 0 1.1rem;color:var(--ink-dim)">
+    <li>It lives in <b>one browser on one device</b>. Your phone and your
+        laptop are two different copies, and neither knows about the other.</li>
+    <li>Clearing your browsing data deletes it. So does "reset" on a shared or
+        school-managed machine.</li>
+    <li>There is no password to recover and no version history, because there
+        is nothing on our side to recover it from.</li>
+    <li>On iPhone and iPad, Safari deletes storage a site wrote with a script
+        after <b>7 days</b> with no visit. Adding it to your Home Screen is what
+        turns that off. See below.</li>
+  </ul>
+</div>
+
+<div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+            padding:.9rem;margin-top:.8rem;font-size:.8rem;line-height:1.7">
+  <b>Install it as an app. On an iPhone this is not optional.</b>
+  <div style="color:var(--ink-dim);margin-top:.3rem">
+    The rule that deletes your data is a Safari rule, not a web rule, so what
+    you need to do depends on what you are using. The app works this out for
+    itself and shows you the steps; here is the whole picture.
+  </div>
+  <div style="overflow-x:auto;margin-top:.6rem">
+  <table style="width:100%;border-collapse:collapse;font-size:.76rem">
+    <tr style="text-align:left;color:var(--ink-dim);border-bottom:1px solid var(--line)">
+      <th style="padding:.4rem .3rem">Where you open it</th>
+      <th style="padding:.4rem .3rem">What can delete your schedule</th>
+      <th style="padding:.4rem .3rem">What to do</th>
+    </tr>
+    <tr style="border-bottom:1px solid var(--line)">
+      <td style="padding:.4rem .3rem;vertical-align:top">iPhone or iPad,
+        <b>any</b> browser</td>
+      <td style="padding:.4rem .3rem;vertical-align:top;color:var(--ink-dim)">
+        A <b>7 day</b> timer. Safari clears a site's stored data after a week
+        of not opening it, and every browser on iOS is Safari underneath.</td>
+      <td style="padding:.4rem .3rem;vertical-align:top">Share, then
+        <b>Add to Home Screen</b>. A Home Screen app is exempt.</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--line)">
+      <td style="padding:.4rem .3rem;vertical-align:top">Mac, Safari</td>
+      <td style="padding:.4rem .3rem;vertical-align:top;color:var(--ink-dim)">
+        The same 7 day timer.</td>
+      <td style="padding:.4rem .3rem;vertical-align:top">
+        <b>File, Add to Dock</b> (macOS Sonoma or newer).</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--line)">
+      <td style="padding:.4rem .3rem;vertical-align:top">Chrome, Edge, Samsung,
+        Opera (not on iOS)</td>
+      <td style="padding:.4rem .3rem;vertical-align:top;color:var(--ink-dim)">
+        No timer. Only a disk running low, and then least-visited sites
+        first.</td>
+      <td style="padding:.4rem .3rem;vertical-align:top">Install it from the
+        address bar or the menu, and press <b>protect the storage</b> in
+        Settings.</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--line)">
+      <td style="padding:.4rem .3rem;vertical-align:top">Firefox</td>
+      <td style="padding:.4rem .3rem;vertical-align:top;color:var(--ink-dim)">
+        No timer either.</td>
+      <td style="padding:.4rem .3rem;vertical-align:top">Firefox does not
+        install websites as apps. Press <b>protect the storage</b> in Settings
+        and say yes to the prompt.</td>
+    </tr>
+  </table>
+  </div>
+  <div style="margin-top:.6rem;padding:.5rem .6rem;border:1px solid var(--accent);
+              border-radius:8px">
+    <b>On iPhone and iPad, install it before you type anything in.</b>
+    A Home Screen app gets its own storage, separate from the browser's, so a
+    schedule entered in Safari first does not follow it across. If you have
+    already entered one, use <b>Backup</b> to copy it out and paste it back in
+    over there.
+  </div>
+  <div style="color:var(--ink-dim);margin-top:.5rem">
+    None of this survives you clearing your browsing data. That is what the
+    backup is for.
+  </div>
+</div>
+
+<div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+            padding:.9rem;margin-top:.8rem;font-size:.8rem;line-height:1.7">
+  <b>Backing it up</b>
+  <div style="color:var(--ink-dim);margin-top:.3rem">
+    The schedule page has a <b>&#9921; Backup</b> button. It will copy your
+    schedule out as plain text (paste it into Notes, or a message to yourself)
+    or download it as a <code>.txt</code> file, and it will read either one back
+    in. That is also how you move to a new phone or a new browser. Local mode
+    reminds you about this once a day; you can turn that off in its settings.
+  </div>
+</div>
+
+<div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1.2rem">
+  <a class="btn" href="/local/edit" style="width:auto;margin:0;padding:.7rem 1.1rem">
+    Set up my schedule</a>
+  <a class="btn" href="/local/app" style="width:auto;margin:0;padding:.7rem 1.1rem;
+     background:var(--panel2);color:var(--ink);border:1px solid var(--line)">
+    Open the schedule</a>
+</div>
+
+<div class="hint" style="margin-top:1rem;line-height:1.7">
+  Want it on every device, and recoverable if a browser wipes itself?
+  <a href="{{ url_for('register') }}" style="color:var(--accent)">Make an
+  account</a> instead. Same app, same schedule format; your text is then stored
+  on our server, where an administrator could in principle reach it. Pick
+  whichever of those two you mind less. You can also export from one and
+  import into the other at any time.
+</div>
+
+<div class="links" style="margin-top:1.4rem">
+  <a href="{{ url_for('sample') }}">See a sample week first</a>
+</div>
+{% endblock %}

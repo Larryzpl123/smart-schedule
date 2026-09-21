@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Sign up{% endblock %}
+{% block body %}
+<h1>Create your account</h1>
+<form method="post">
+  <label>School email</label>
+  <input name="email" type="email" placeholder="27doej@{{ domain }}" required>
+  <label>Your name</label>
+  <input name="name" placeholder="Jane Doe" required>
+  <label>Password (min 6 chars)</label>
+  <input name="password" type="password" required>
+  <button type="submit">Send verification code</button>
+</form>
+<div class="hint">We email a 6-digit code to your @{{ domain }} address to confirm it's you. Your password is stored hashed, never in plain text.</div>
+<div class="links">Already have an account? <a href="{{ url_for('login') }}">Log in</a></div>
+<div class="links" style="margin-top:.4rem">
+  <a href="{{ url_for('sample') }}">See a sample schedule first</a></div>
+<div class="links" style="margin-top:.6rem">
+  Or skip the account: <a href="{{ url_for('local_intro') }}">local mode</a>
+  <span style="color:var(--ink-dim)">keeps your schedule in this browser
+  only</span>
+</div>
+{% endblock %}
