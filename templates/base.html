@@ -31,6 +31,9 @@
   header .brand{font-weight:600;letter-spacing:.05em}
   header .sub{color:var(--ink-dim);font-size:.7rem;text-transform:uppercase;letter-spacing:.18em;margin-top:.15rem}
   header nav a{color:var(--ink-dim);text-decoration:none;font-size:.8rem;margin-left:1rem}
+  /* same reason as the schedule page: without a rule between them two links
+     a word-space apart read as one phrase */
+  header nav a + a{border-left:1px solid var(--line);padding-left:1rem}
   header nav a:hover{color:var(--accent)}
   main{flex:1;display:flex;justify-content:center;align-items:flex-start;padding:2.5rem 1.2rem}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1.6rem;width:100%;max-width:420px}
@@ -53,6 +56,7 @@
     header{padding:.7rem .8rem;flex-wrap:wrap;gap:.4rem}
     header nav{width:100%;display:flex;gap:.8rem}
     header nav a{margin-left:0}
+    header nav a + a{padding-left:.7rem}
     main{padding:1rem .7rem 2.5rem}
     .card,.card.wide{max-width:100%;padding:1rem;border-radius:10px}
     input,textarea,select,button{font-size:16px}   /* iOS zooms in below 16px */

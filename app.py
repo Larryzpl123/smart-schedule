@@ -26,6 +26,7 @@ import hmac
 import io
 import json
 import os
+import stat
 import re
 import random
 import secrets
@@ -2349,6 +2350,111 @@ BACKUP_EVERY_HOURS = int(os.environ.get("BACKUP_EVERY_HOURS", "24"))
 DISK_QUOTA_MB = float(os.environ.get("DISK_QUOTA_MB", "512"))
 
 
+# ---------------------------------------------------------------------------
+# What is actually on the disk
+#
+# The panel used to measure the database and the snapshots, add them up, and
+# print the total as "used of 512 MB". That is a subset wearing the label of
+# the whole: on the live host the installed packages in ~/.local and pip's
+# download cache came to about 58 MB before a single student existed, and the
+# panel said 0.31. It was not wrong about the database; it was answering a
+# narrower question than the sentence it printed.
+#
+# Counted in 512-byte blocks rather than apparent size, because that is what
+# du reports and what the host's quota meter agrees with. Ten thousand small
+# package files occupy noticeably more disk than they contain.
+_DISK_CACHE = {"at": 0.0, "data": None}
+DISK_SCAN_TTL = 600          # seconds; a walk of a full home is not free
+DISK_SCAN_MAX_ENTRIES = 300000   # a rail, so a pathological tree cannot hang /admin
+
+
+def _entry_bytes(st):
+    blocks = getattr(st, "st_blocks", 0)
+    return blocks * 512 if blocks else st.st_size
+
+
+def _tree_bytes(path):
+    """Disk used by one file or one directory tree. Never raises."""
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return 0, 0
+    if not stat.S_ISDIR(st.st_mode):
+        return _entry_bytes(st), 1
+    total, seen = _entry_bytes(st), 1
+    for dirpath, dirnames, filenames in os.walk(path, onerror=lambda e: None):
+        # Do not follow symlinks out of the tree, and do not count what is on
+        # the other end of one: du does not either, and a loop would never end.
+        dirnames[:] = [d for d in dirnames
+                       if not os.path.islink(os.path.join(dirpath, d))]
+        for name in filenames + dirnames:
+            try:
+                total += _entry_bytes(os.lstat(os.path.join(dirpath, name)))
+            except OSError:
+                continue
+            seen += 1
+            if seen > DISK_SCAN_MAX_ENTRIES:
+                return total, seen
+    return total, seen
+
+
+def home_usage():
+    """Every top-level entry in the home directory, biggest first.
+
+    Returns {'total', 'items':[{name, bytes, kind}], 'capped', 'home'} where
+    kind is one of app / data / libs / purgeable / other, so the page can say
+    which part of the number is fixed overhead and which part grows with
+    students. Cached, because /admin should not walk the disk on every load."""
+    now = time.time()
+    cached = _DISK_CACHE["data"]
+    if cached and now - _DISK_CACHE["at"] < DISK_SCAN_TTL:
+        return cached
+    home = os.path.expanduser("~")
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    data_dirs = {os.path.abspath(os.path.dirname(DB)),
+                 os.path.abspath(BACKUP_DIR)}
+    out = {"home": home, "total": 0, "items": [], "capped": False,
+           "scanned_at": now}
+    try:
+        names = sorted(os.listdir(home))
+    except OSError as e:
+        out["error"] = str(e)
+        return out
+    total_seen = 0
+    for name in names:
+        path = os.path.join(home, name)
+        if os.path.islink(path):
+            continue
+        n_bytes, seen = _tree_bytes(path)
+        total_seen += seen
+        ap = os.path.abspath(path)
+        if ap == os.path.abspath(app_dir):
+            kind = "app"
+        elif ap in data_dirs or any(d.startswith(ap + os.sep) for d in data_dirs):
+            kind = "data"
+        elif name in (".local", ".virtualenvs", ".npm"):
+            kind = "libs"
+        elif name in (".cache",):
+            # pip's download cache. Nothing needs it; `rm -rf ~/.cache/pip`
+            # gets every byte back and pip just downloads again if it has to.
+            kind = "purgeable"
+        else:
+            kind = "other"
+        out["items"].append({"name": name, "bytes": n_bytes, "kind": kind})
+        out["total"] += n_bytes
+    out["capped"] = total_seen > DISK_SCAN_MAX_ENTRIES
+    out["items"].sort(key=lambda x: -x["bytes"])
+    by_kind = {}
+    for it in out["items"]:
+        by_kind[it["kind"]] = by_kind.get(it["kind"], 0) + it["bytes"]
+    out["by_kind"] = by_kind
+    # Fixed overhead: everything that does not grow when a student signs up.
+    out["overhead"] = (by_kind.get("libs", 0) + by_kind.get("purgeable", 0)
+                       + by_kind.get("app", 0) + by_kind.get("other", 0))
+    _DISK_CACHE.update(at=now, data=out)
+    return out
+
+
 def storage_report():
     """Real measured numbers for the admin page. Never raises."""
     def size(path):
@@ -2405,8 +2511,19 @@ def storage_report():
              "kept_mb": round(min(BACKUP_KEEP * n * snap / 1e6, BACKUP_MAX_MB), 1)}
             for n in (100, 300, 600)]
         r["used_mb"] = round((r["db_bytes"] + r["backup_bytes"]) / 1e6, 2)
+        # What the WHOLE account is using, not just the part this app writes.
+        h = home_usage()
+        r["home"] = h
+        r["home_mb"] = round(h.get("total", 0) / 1e6, 1)
+        r["overhead_mb"] = round(h.get("overhead", 0) / 1e6, 1)
+        r["purge_mb"] = round(h.get("by_kind", {}).get("purgeable", 0) / 1e6, 1)
+        r["free_mb"] = round(DISK_QUOTA_MB - r["home_mb"], 1)
+        # Worst case is the fixed overhead PLUS a full set of snapshots, not
+        # the snapshots on their own -- the old figure quietly assumed the rest
+        # of the disk was empty.
         r["worst_mb"] = round(r["db_bytes"] / 1e6 + BACKUP_MAX_MB, 1)
-        r["ok"] = r["worst_mb"] < DISK_QUOTA_MB * 0.5
+        r["worst_total_mb"] = round(r["overhead_mb"] + r["worst_mb"], 1)
+        r["ok"] = r["worst_total_mb"] < DISK_QUOTA_MB * 0.5
     except Exception as e:
         r["error"] = str(e)
     return r

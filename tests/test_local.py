@@ -12,7 +12,7 @@ the two modes disagree about what a legal schedule is and an export from one
 will not import into the other.
 """
 import io, json, os, subprocess, sys, tempfile, time
-import urllib.request, urllib.error
+import urllib.request, urllib.error, urllib.parse, http.cookiejar
 
 APP_DIR = os.environ.get("SSA_APP") or os.path.abspath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
@@ -421,6 +421,91 @@ try:
         ck(not p5.locator("#keepIOS").is_visible(),
            "and it does not claim a 7 day timer on Chrome")
         c4.close()
+
+        print("\n[the two modes must agree about what day it is]")
+        # The bug this catches: PATHS knew about local mode and loadYear did
+        # not, so /local/app asked for a RELATIVE calendar/<year>.txt, got a
+        # 404, and silently fell back to the copy baked into app.html. That
+        # copy has no @anchor an admin added since the last build, so the
+        # whole 8 day rotation was off by one and nothing said so.
+        # An account and a local browser looking at the same Tuesday must see
+        # the same cycle day. Nothing else in this file would have noticed.
+        def cycles(page, url):
+            page.goto(BASE + url)
+            page.wait_for_timeout(1800)
+            return page.evaluate("""() => {
+              const out = {};
+              document.querySelectorAll('.dcell').forEach(c => {
+                const d = c.querySelector('.dnum'), y = c.querySelector('.dcyc');
+                if (d) out[d.textContent.trim()] = y ? y.textContent.trim() : '';
+              });
+              return out;
+            }""")
+        cal_req = []
+        p6 = ctx.new_page()
+        p6.on("request", lambda r: cal_req.append(r.url)
+              if "/calendar" in r.url else None)
+        loc = cycles(p6, "/local/app")
+        ck(any("/api/calendar/" in u for u in cal_req),
+           f"local mode reads the LIVE calendar, not the baked-in copy ({cal_req})")
+        ck(not any(u.endswith("/local/calendar/") or "/local/calendar/" in u
+                   for u in cal_req),
+           f"and not a relative path that 404s under /local ({cal_req})")
+
+        sp = ctx.new_page()
+        sam_req = []
+        sp.on("request", lambda r: sam_req.append(r.url)
+              if "/calendar" in r.url else None)
+        sam = cycles(sp, "/sample")
+        ck(any("/api/calendar/" in u for u in sam_req),
+           f"the sample page reads it live too ({sam_req})")
+
+        shared = [k for k in loc if k in sam and loc[k] and sam[k]]
+        ck(len(shared) >= 3, f"the two pages show the same week ({len(shared)} days)")
+        bad = [(k, loc[k], sam[k]) for k in shared if loc[k] != sam[k]]
+        ck(not bad, f"local and sample agree on every cycle day ({bad})")
+
+        # Comparing local against sample is not enough on its own: with the bug
+        # both fall back to the SAME baked-in copy and agree with each other
+        # while both being wrong. The only thing that separates them is an
+        # anchor that exists in the database and NOT in the calendar file,
+        # which is exactly the state a live site is in after an admin adds one.
+        adm = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        adm.open(urllib.request.Request(BASE + "/admin/login",
+                 urllib.parse.urlencode({"password": "apw"}).encode()))
+        adm.open(urllib.request.Request(BASE + "/admin/anchor",
+                 urllib.parse.urlencode({"date": "2026-09-08", "day": "5"}).encode()))
+        live = urllib.request.urlopen(BASE + "/api/calendar/2026-2027").read().decode()
+        ck("@anchor 2026-09-08 = 5" in live,
+           "the admin's anchor is in what the server serves")
+        with open(os.path.join(APP_DIR, "calendar", "2026-2027.txt"),
+                  encoding="utf-8") as fh:
+            ck("@anchor 2026-09-08 = 5" not in fh.read(),
+               "and NOT in the calendar file, so only a live read can see it")
+        after = cycles(p6, "/local/app")
+        moved = [k for k in after if k in loc and after[k] != loc[k]]
+        ck(moved, f"local mode's cycle days move when an admin re-anchors "
+                  f"({len(moved)} days changed)")
+        p6.close(); sp.close()
+
+        print("\n[the front door remembers local mode]")
+        d1 = ctx.new_page()
+        d1.goto(BASE + "/")
+        d1.wait_for_timeout(900)
+        ck(d1.url.rstrip("/").endswith("/local/app"),
+           f"a browser that already holds a schedule goes straight in ({d1.url})")
+        d1.goto(BASE + "/?choose=1")
+        d1.wait_for_timeout(900)
+        ck("choose=1" in d1.url,
+           f"but ?choose=1 always shows the choice ({d1.url})")
+        fresh = b.new_context()
+        d2 = fresh.new_page()
+        d2.goto(BASE + "/")
+        d2.wait_for_timeout(900)
+        ck(d2.url.rstrip("/").endswith(BASE.rstrip("/")) or d2.url.rstrip("/") == BASE,
+           f"and a browser with nothing in it still gets the choice ({d2.url})")
+        fresh.close(); d1.close()
 
         print("\n[house style]")
         for path in ["/", "/local", "/local/edit", "/local/app"]:

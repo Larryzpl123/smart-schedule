@@ -47,6 +47,15 @@
      border:1px solid var(--line);border-radius:8px;padding:.7rem;font-size:.76rem"></div>
 {% endif %}
 {% if not local %}
+<!-- Not a button in the header: leaving your account is a once-ever decision,
+     and it needs the .txt above it first, so this belongs next to the export
+     rather than one stray click from every page. -->
+<div class="hint" style="margin-bottom:1rem;line-height:1.6">
+  Would rather nothing of yours sat on our server?
+  <a href="{{ url_for('local_intro') }}" style="color:var(--accent)">Local mode</a>
+  keeps your schedule in your browser instead, with no account at all. It keeps
+  a separate copy, so <b>Download (.txt)</b> first and load it in over there.
+</div>
 <div style="margin-bottom:1rem">
   <button type="button" class="filebtn" id="histBtn"
           style="width:auto;margin:0">↺ Earlier versions</button>

@@ -378,7 +378,16 @@
     </div>
   </div>
 </header>
-<style>#acctNav a:hover{color:var(--accent)!important}</style>
+<style>
+  #acctNav a:hover{color:var(--accent)!important}
+  /* a + a, so the first link has no rule and a hidden one (Admin) still
+     counts as a sibling -- no orphan divider when it is not shown */
+  #acctNav a + a{border-left:1px solid var(--line);padding-left:1rem}
+  @media(max-width:700px){
+    #acctNav{gap:.6rem!important}
+    #acctNav a + a{padding-left:.6rem}
+  }
+</style>
 
 <div class="toolbar">
   <div class="nav">
@@ -624,6 +633,21 @@
     <b>Storage</b><br>
     <span id="setStore" style="color:var(--ink-dim)">Checking&hellip;</span>
   </div>
+  <hr style="border:0;border-top:1px solid var(--line);margin:.8rem 0 .7rem">
+  <div style="font-size:.78rem;line-height:1.6">
+    <b>Want an account instead?</b>
+    <div style="font-size:.72rem;color:var(--ink-dim);margin-top:.25rem">
+      An account puts your schedule on every device and can get it back if this
+      browser is cleared. It is <b>not</b> a switch: the two keep separate
+      copies, so back this one up first with <b>&#9921; Backup</b> and paste it
+      in over there.
+      <a href="/?choose=1" style="color:var(--accent)">Compare the two</a>.
+    </div>
+    <div style="font-size:.72rem;color:var(--ink-dim);margin-top:.5rem">
+      While there is a schedule in this browser the front page opens local mode
+      directly, so that link is how you get back to the choice.
+    </div>
+  </div>
   <div class="row" style="justify-content:flex-end">
     <button id="setClose">Close</button>
   </div>
@@ -720,7 +744,16 @@ let CAPS = {events:50, hw:60, sports:8, projects:12, bytes:32*1024};
    real school-wide config (both are public endpoints). Only the student is
    made up. Reading the live calendar is also what stops the sample from
    complaining about missing cycle anchors. */
-const PATHS = (BACKEND || SAMPLE || LOCAL) ? {
+/* One name for "Flask is serving this page", because the last time the same
+   condition was written out twice the two copies drifted: PATHS learned about
+   local mode and loadYear did not, so /local/app and /sample quietly asked for
+   a RELATIVE calendar/<year>.txt, got a 404, and fell back to the copy baked
+   into this file -- a calendar frozen at whenever this file was last built,
+   missing every @anchor an admin has added since. The page said nothing and
+   showed the wrong cycle day. Anything that needs to know goes through this
+   constant. */
+const SERVED = BACKEND || SAMPLE || LOCAL;
+const PATHS = SERVED ? {
   cal: id => `/api/calendar/${id}`,
   shared: "/api/schedule-shared",
   me: BACKEND ? "/api/my-schedule" : null,
@@ -2465,7 +2498,7 @@ async function tryFetch(path,fallback){try{const r=await fetch(path,{cache:"no-s
 
 async function loadYear(y){
   curYear=y;
-  const res=await tryFetch(BACKEND?PATHS.cal(y.id):y.path, EMBED[y.id]||"");
+  const res=await tryFetch(SERVED?PATHS.cal(y.id):y.path, EMBED[y.id]||"");
   const built=buildDayMap(parseCalendar(res.text,y.startYear));
   DAYMAP=built.map; MAPINFO=built;
   /* Both of these are notes to whoever is running the app, not to a student:

@@ -147,5 +147,62 @@ ck(projected[600]["kept_mb"] <= r["cap_mb"] + 0.01,
 ck(r["worst_mb"] < r["quota_mb"],
    f"worst case still fits the quota ({r['worst_mb']} of {r['quota_mb']} MB)")
 
+# ---- the panel must not report a subset as the whole -----------------------
+# Larry checked the live host: du said 58.3 MB used, the panel said 0.31 MB
+# "used of 512 MB". It was measuring the database and the snapshots only, and
+# printing that as total usage. Everything below builds a fake home directory
+# with a known shape and checks the panel sees ALL of it.
+print("\n[the disk figure is the whole account, not just our part]")
+import subprocess, json, textwrap
+
+FAKE = tempfile.mkdtemp(prefix="ssa_home_")
+def fill(rel, n_files, size):
+    d = os.path.join(FAKE, rel)
+    os.makedirs(d, exist_ok=True)
+    for i in range(n_files):
+        with open(os.path.join(d, f"f{i}.bin"), "wb") as fh:
+            fh.write(b"x" * size)
+fill(".local/lib", 20, 50_000)        # ~1 MB of "installed packages"
+fill(".cache/pip", 10, 100_000)       # ~1 MB of purgeable cache
+fill("somethingelse", 2, 10_000)
+
+probe = textwrap.dedent(f"""
+    import os, sys, json
+    os.environ["HOME"] = {FAKE!r}
+    os.environ["DB_PATH"] = {os.environ["DB_PATH"]!r}
+    os.environ["BACKUP_DIR"] = {os.environ["BACKUP_DIR"]!r}
+    os.environ["SECRET_KEY"] = "rt"
+    sys.path.insert(0, {APP_DIR!r})
+    os.chdir({APP_DIR!r})
+    import app
+    h = app.home_usage()
+    print(json.dumps({{"total": h["total"], "by_kind": h["by_kind"],
+                       "overhead": h["overhead"],
+                       "names": [i["name"] for i in h["items"]],
+                       "kinds": {{i["name"]: i["kind"] for i in h["items"]}}}}))
+""")
+out = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True)
+h = json.loads(out.stdout.strip().split("\n")[-1])
+
+du = subprocess.run(["du", "-s", "--block-size=1", FAKE],
+                    capture_output=True, text=True).stdout.split()[0]
+du = int(du)
+# du counts the root directory too; home_usage() sums the entries inside it.
+ck(abs(h["total"] - du) < du * 0.05 + 8192,
+   f"the total agrees with du to within a rounding error "
+   f"({h['total']} vs {du})")
+ck(h["kinds"].get(".cache") == "purgeable",
+   f"pip's cache is flagged as safe to delete ({h['kinds'].get('.cache')})")
+ck(h["kinds"].get(".local") == "libs",
+   f"installed packages are flagged as fixed overhead ({h['kinds'].get('.local')})")
+ck(h["by_kind"].get("purgeable", 0) > 900_000,
+   f"and the cache's size is actually counted ({h['by_kind'].get('purgeable')})")
+ck(h["overhead"] >= h["by_kind"].get("libs", 0) + h["by_kind"].get("purgeable", 0),
+   "overhead is everything that does not grow with students")
+# the assertion that would have caught the original bug
+ck(h["total"] > r["db_bytes"] + r["backup_bytes"],
+   f"and the headline number counts things this app never wrote "
+   f"({h['total']} vs {r['db_bytes'] + r['backup_bytes']} of ours)")
+
 print(f"\n{'ALL PASS' if not FAIL else str(len(FAIL)) + ' FAILED'}")
 sys.exit(1 if FAIL else 0)

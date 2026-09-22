@@ -2,6 +2,20 @@
 {% block title %}SSA Smart Schedule{% endblock %}
 {% block cardclass %}wide{% endblock %}
 {% block body %}
+<script>
+/* Somebody who has already set local mode up has a schedule sitting in this
+   browser, which is evidence enough of which door they want; making them pick
+   again every time is a toll on the one path that has no account to remember
+   them. The schedule itself is the flag, so there is nothing extra to keep in
+   sync and clearing the browser clears this too.
+   /?choose=1 always shows this page, for when somebody wants the other door. */
+(function(){try{
+  if(new URLSearchParams(location.search).has("choose")) return;
+  var t = localStorage.getItem("ssa-local-schedule");
+  if(t && t.trim().length > 3) location.replace("/local/app");
+}catch(e){}})();
+</script>
+
 <h1>Your week, on the 8 day rotation</h1>
 
 <div class="hint" style="margin-top:0;line-height:1.7">

@@ -56,11 +56,51 @@
 {% if storage and not storage.error %}
 <details style="margin-bottom:1rem;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.6rem .8rem">
   <summary style="cursor:pointer;font-size:.78rem">
-    Disk: <b>{{ storage.used_mb }} MB</b> used of {{ storage.quota_mb|int }} MB
-    &middot; worst case with a full set of snapshots
-    <b style="color:var(--{{ 'good' if storage.ok else 'bad' }})">{{ storage.worst_mb }} MB</b>
+    Disk: <b>{{ storage.home_mb }} MB</b> used of {{ storage.quota_mb|int }} MB
+    &middot; worst case
+    <b style="color:var(--{{ 'good' if storage.ok else 'bad' }})">{{ storage.worst_total_mb }} MB</b>
   </summary>
   <div style="font-size:.74rem;color:var(--ink-dim);line-height:1.7;margin-top:.6rem">
+    {% if storage.home and storage.home.items %}
+    <b style="color:var(--ink)">Where it actually goes.</b>
+    This is the whole hosting account, measured the way <code>du</code> counts
+    it, not just the part this app writes. Most of it is there before a single
+    student signs up.
+    <table style="width:100%;border-collapse:collapse;margin:.4rem 0 .7rem;font-size:.73rem">
+      {% for it in storage.home['items'] if it.bytes > 100000 %}
+      <tr style="border-bottom:1px solid var(--line)">
+        <td style="padding:.2rem .3rem"><code>~/{{ it.name }}</code></td>
+        <td style="padding:.2rem .3rem;text-align:right;font-variant-numeric:tabular-nums">
+          {{ '%.1f'|format(it.bytes / 1000000) }} MB</td>
+        <td style="padding:.2rem .3rem;color:var(--ink-dim)">
+          {% if it.kind == 'libs' %}installed packages, fixed
+          {% elif it.kind == 'purgeable' %}pip's download cache, safe to delete
+          {% elif it.kind == 'app' %}this app's code
+          {% elif it.kind == 'data' %}database and snapshots, grows with students
+          {% else %}&nbsp;{% endif %}</td>
+      </tr>
+      {% endfor %}
+      <tr>
+        <td style="padding:.2rem .3rem"><b>total</b></td>
+        <td style="padding:.2rem .3rem;text-align:right;font-variant-numeric:tabular-nums">
+          <b>{{ storage.home_mb }} MB</b></td>
+        <td style="padding:.2rem .3rem">{{ storage.free_mb }} MB left</td>
+      </tr>
+    </table>
+    {% if storage.purge_mb and storage.purge_mb >= 1 %}
+    <code>rm -rf ~/.cache/pip</code> frees {{ storage.purge_mb }} MB of that and
+    costs nothing: pip downloads again if it ever needs to.<br>
+    {% endif %}
+    Fixed overhead is <b>{{ storage.overhead_mb }} MB</b>, so the room that
+    student data can actually grow into is about
+    <b>{{ (storage.quota_mb - storage.overhead_mb)|round(0)|int }} MB</b>,
+    not the full {{ storage.quota_mb|int }}. The worst case above is that
+    overhead plus a full set of snapshots.
+    {% if storage.home.capped %}<br><span style="color:var(--bad)">The scan hit
+    its entry limit, so the total is a floor, not the whole figure.</span>{% endif %}
+    <br><br>
+    {% endif %}
+    <b style="color:var(--ink)">The part that grows.</b>
     Database <code>{{ '%.2f'|format(storage.db_bytes / 1000000) }} MB</code>
     &middot; snapshots <code>{{ storage.backup_count }}</code> file{{ '' if storage.backup_count == 1 else 's' }},
     <code>{{ '%.2f'|format(storage.backup_bytes / 1000000) }} MB</code>
