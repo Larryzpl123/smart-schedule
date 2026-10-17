@@ -2025,6 +2025,8 @@ def check_shared(text):
     errors, warnings = [], []
     days = {}
     letters = {}
+    special_names = set()
+    retimes = []          # (line number, date, timetable name)
 
     for n, raw in enumerate(text.replace("\r\n", "\n").split("\n"), 1):
         line = raw.strip()
@@ -2081,9 +2083,33 @@ def check_shared(text):
             if len(parts) < 3:
                 errors.append(f"Line {n}: @special needs NAME | HH:MM-HH:MM | what [| grades].")
             else:
-                bad = _check_range(parts[1])
-                if bad:
-                    errors.append(f"Line {n}: {bad}.")
+                special_names.add(parts[0])
+                # "10:55-11:40/11:25-12:10" = early/late lunch tracks. A slash,
+                # because "|" is already this line's column separator.
+                tracks = parts[1].split("/")
+                if len(tracks) > 2:
+                    errors.append(f"Line {n}: at most two lunch tracks, "
+                                  f"EARLY/LATE, separated by one '/'.")
+                for part in tracks:
+                    bad = _check_range(part.strip())
+                    if bad:
+                        errors.append(f"Line {n}: {bad}.")
+                pm = re.match(r"^period\s+(\d+)$", parts[2], re.I)
+                if pm and not 1 <= int(pm.group(1)) <= 8:
+                    errors.append(f"Line {n}: there is no period {pm.group(1)}; "
+                                  f"a day has periods 1-8 at most.")
+
+        elif line.startswith("@retime"):
+            m = re.match(r"^@retime\s+(\d{4}-\d{2}-\d{2})\s*=\s*(.+)$", line)
+            if not m:
+                errors.append(f"Line {n}: @retime should look like "
+                              f"'@retime 2026-10-16 = Pep Rally (outdoor)'.")
+            else:
+                try:
+                    datetime.strptime(m.group(1), "%Y-%m-%d")
+                except ValueError:
+                    errors.append(f"Line {n}: {m.group(1)} is not a real date.")
+                retimes.append((n, m.group(1), m.group(2).strip()))
 
         elif line.startswith("@imm_block"):
             m = re.match(r"^@imm_block\s+(.*?)\s+-\s+(\S+)\s*$", line)
@@ -2103,11 +2129,21 @@ def check_shared(text):
             known = ("@day", "@semester", "@community", "@imm_community",
                      "@imm_block", "@immersive", "@public", "@special",
                      "@finals", "@wed", "@dismiss", "@latearly", "@sport",
-                     "@pref", "@term", "@event", "@hw", "@anchor")
+                     "@pref", "@term", "@event", "@hw", "@anchor", "@retime")
             word = re.split(r"[\s=|]", line, 1)[0]
             if word not in known:
                 warnings.append(f"Line {n}: {word!r} isn't a directive this app "
                                 f"knows, so it will be ignored.")
+
+    for n, date_s, name in retimes:
+        if name not in special_names:
+            close = [x for x in special_names
+                     if x.split("(")[0].strip() == name.split("(")[0].strip()]
+            hint = (f" Did you mean {' or '.join(repr(x) for x in sorted(close))}?"
+                    if close else "")
+            errors.append(f"Line {n}: @retime {date_s} names a timetable "
+                          f"{name!r}, but no @special line has that name, so "
+                          f"the day would quietly stay on normal times.{hint}")
 
     missing = [d for d in range(1, 9) if d not in days]
     if missing:

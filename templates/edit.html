@@ -398,7 +398,12 @@ const MAX_EVENTS={{ caps.events }}, MAX_HW={{ caps.hw }};
    These build the same lines out of dropdowns instead. Anything that does not
    fit the pickers (someone hand-wrote an odd line in Text mode) falls back to a
    plain text box for that row, so nothing is ever silently dropped. */
-const TIMES=(()=>{const o=[];for(let m=7*60;m<=19*60;m+=5)
+/* 06:00 to 23:00, because that is exactly what the grid can draw: AX_FLOOR
+   and AX_CEIL in static/app.html. These two ranges have to be the same
+   number. When this list stopped at 19:00 the grid would happily have drawn a
+   22:00 rehearsal -- fitAxis() stretches to fit -- but there was no way to
+   type one in, so the app refused an event it was perfectly able to show. */
+const TIMES=(()=>{const o=[];for(let m=6*60;m<=23*60;m+=5)
   o.push(String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"));return o;})();
 const DURS=[10,15,20,25,30,40,45,50,55,60,75,80,90,120,150,180];
 /* Suggestions for the duration box, not a limit on it. */

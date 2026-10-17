@@ -23,6 +23,8 @@ srv = subprocess.Popen(
     cwd=APP_DIR, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 time.sleep(3)
 
+SCHED_LATE = """Jane Doe\n27 - Junior\n\n@term Fall 2026 = 08.25-01.15\nA - AP Calculus BC - MA560 - 1 - Ms. Rivera - R 210 - red\n\n@event Tue - Late rehearsal - 22:00-23:00 - purple\n@pref time_format = 24h\n"""
+
 FAIL = []
 def ck(c, l):
     print(("  PASS  " if c else "  FAIL  ") + l)
@@ -296,6 +298,56 @@ try:
         f24 = formTimes()
         ck("16:00" in f24["labels"] and f24["values"] == f12["values"],
            "and switching back relabels without touching the values")
+
+        # ---- the dropdown must offer every hour the grid can draw ----------
+        # Larry had a 10pm event and the latest option was 7pm. The grid was
+        # never the problem: fitAxis() stretches to AX_CEIL (23:00), so it
+        # would have drawn the thing happily. Only the list of options said no,
+        # which is the app refusing to accept something it can already display.
+        vals = f24["values"]
+        ck(vals[0] == "06:00",
+           f"the form starts at the earliest hour the grid draws ({vals[0]})")
+        ck(vals[-1] == "23:00",
+           f"and ends at the latest one ({vals[-1]})")
+        ck("22:00" in vals, "22:00 is selectable")
+
+        # and the two lists must not drift apart: the grid decides, the form
+        # follows. Read the grid's own limits rather than trusting a literal.
+        pg.goto(BASE + "/app")
+        pg.wait_for_timeout(1200)
+        lim = pg.evaluate("({floor: AX_FLOOR, ceil: AX_CEIL, "
+                          "first: QTIMES[0], last: QTIMES[QTIMES.length-1]})")
+        def hhmm(mins):
+            return f"{mins // 60:02d}:{mins % 60:02d}"
+        ck(lim["first"] == hhmm(lim["floor"]) and lim["last"] == hhmm(lim["ceil"]),
+           f"the grid's own dialog covers exactly its axis range ({lim})")
+        ck(vals[0] == hhmm(lim["floor"]) and vals[-1] == hhmm(lim["ceil"]),
+           f"and /edit offers the same range as the grid ({vals[0]}-{vals[-1]} "
+           f"vs {lim['first']}-{lim['last']})")
+
+        # end to end: a late event entered on /edit actually appears
+        pg.goto(BASE + "/edit")
+        pg.wait_for_timeout(500)
+        pg.click("#modeText")
+        pg.fill("#rawText", SCHED_LATE)
+        pg.click("#schedForm button[type=submit]")
+        pg.wait_for_timeout(800)
+        pg.goto(BASE + "/app")
+        pg.wait_for_timeout(1500)
+        drawn = pg.evaluate("""() => {
+          const out = [];
+          document.querySelectorAll('#gbody .block').forEach(el => {
+            if ((el.textContent || '').includes('Late rehearsal'))
+              out.push({end: +el.dataset.end, h: el.getBoundingClientRect().height});
+          });
+          return {hits: out, axEnd: AX_END};
+        }""")
+        ck(len(drawn["hits"]) >= 1,
+           f"a 22:00 event drawn on the grid ({drawn})")
+        ck(drawn["axEnd"] >= 23 * 60,
+           f"and the axis stretched to hold it ({drawn['axEnd']} minutes)")
+        ck(all(x["h"] > 4 for x in drawn["hits"]),
+           f"with real height, not clipped to nothing ({drawn['hits']})")
 
         b.close()
 except ImportError:

@@ -1103,7 +1103,7 @@ function parseCalendar(txt,startYear){
 }
 
 function parseStudent(txt){
-  const s={name:"",form:"",classes:{},latearly:{},days:{},fixed:[],imm:null,immBlocks:[],sports:[],publics:[],special:{},events:[],hw:[],projects:[],pref:{},terms:[]};
+  const s={name:"",form:"",classes:{},latearly:{},days:{},fixed:[],imm:null,immBlocks:[],sports:[],publics:[],special:{},retime:{},events:[],hw:[],projects:[],pref:{},terms:[]};
   let idx=0, curTerm=null;
   const ensureTerm=()=>{ if(!curTerm){curTerm={label:"All Year",from:null,to:null,classes:{},imm:null,sports:[]};s.terms.push(curTerm);} return curTerm; };
   for(const raw of txt.split(/\r?\n/)){
@@ -1200,7 +1200,20 @@ function parseStudent(txt){
     /* Special-day timetable (Convocation and the like), keyed by the name the
        calendar file gives that day:
        "@special Convocation | 09:55-10:20 | first-of-day 1 | ALL" */
-    if(line.startsWith("@special")){const p=line.replace("@special","").split("|").map(x=>x.trim());const t=(p[1]||"").split("-");if(p[0]&&t.length===2){(s.special[p[0]]=s.special[p[0]]||[]).push({start:t[0],end:t[1],label:p[2]||"",grades:(p[3]||"ALL").trim()});}continue;}
+    /* "|" already separates the columns of an @special line, so a midday period
+       with two lunch tracks writes them EARLY/LATE with a slash:
+       "10:55-11:40/11:25-12:10". Same order as @day's "|": early first. */
+    if(line.startsWith("@special")){const p=line.replace("@special","").split("|").map(x=>x.trim());
+      const tr=(p[1]||"").split("/");const t=tr[0].split("-");const t2=(tr[1]||"").split("-");
+      if(p[0]&&t.length===2){(s.special[p[0]]=s.special[p[0]]||[]).push({start:t[0].trim(),end:t[1].trim(),
+        start2:t2.length===2?t2[0].trim():null,end2:t2.length===2?t2[1].trim():null,
+        label:p[2]||"",grades:(p[3]||"ALL").trim()});}continue;}
+    /* "@retime 2026-10-16 = Pep Rally (outdoor)": a normal cycle day that keeps
+       its cycle number and its classes but runs on the timetable of that name.
+       Lives in the shared config, not the calendar file, so an admin can flip
+       it from a phone at 7:55 without a deploy. */
+    if(line.startsWith("@retime")){const m=line.match(/^@retime\s+(\d{4}-\d{2}-\d{2})\s*=\s*(.+)$/);
+      if(m)s.retime[m[1]]=m[2].trim();continue;}
     if(line.startsWith("@public")){const p=line.replace("@public","").trim().split(" - ").map(x=>x.trim());const t=(p[2]||"").split("-");if(p[0]&&t.length===2)s.publics.push({date:p[0],name:p[1],start:t[0],end:t[1],grades:(p[3]||"ALL").trim(),color:p[4]||"pink"});continue;}
     if(line.startsWith("@latearly")){line.replace("@latearly","").trim().split(/\s+/).forEach(p=>{const a=p.split("=");if(a[0]&&a[1])s.latearly[a[0]]=a[1];});continue;}
     if(line.startsWith("@day")){const m=line.match(/^@day\s+(\d+)\s*=\s*(.*)$/);if(m)s.days[m[1]]=m[2].trim().split(/\s+/).filter(Boolean).map(tok=>{
@@ -1469,6 +1482,17 @@ function itemsOn(d){
      full     {name, note} when the whole day is a wash (a holiday, or a
               special day the shared config has no timetable for), else null
      dismiss  the dismissal minute, or null                                  */
+/* The timetable a retimed day runs on, or null. Only for a day that is a real
+   cycle day: retiming changes WHEN the classes meet, never WHICH day it is --
+   that is the whole difference from a calendar "special" day, which drops out
+   of the rotation and would shift every day after it by one. */
+function retimeOf(k){
+  const info=DAYMAP[k];
+  if(!STU||!info||!info.school||!info.cycle)return null;
+  const n=(STU.retime||{})[k];
+  return (n&&STU.special&&STU.special[n])?n:null;
+}
+
 function daySpecs(d){
   const k=dkey(d), info=DAYMAP[k];
   const DN3=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
@@ -1533,6 +1557,32 @@ function daySpecs(d){
         room:named?imm.room:"",teacher:named?imm.teacher:"",
         per:named?b.label:(sess?"Add your immersive course in Edit":""),
         teach:named?`${imm.teacher} \u00b7 ${imm.room}`:""});
+    });
+  } else if(info&&info.school&&info.cycle&&T&&retimeOf(k)){
+    /* A retimed cycle day. "period N" is the student's own class in the Nth
+       period of TODAY's rotation, so the same timetable is right for every
+       student; anything else is a school-wide block (the rally itself). */
+    STU.special[retimeOf(k)].forEach(sl=>{
+      const g=(sl.grades||"ALL").toUpperCase();
+      const mine = g==="ALL" || g.split(",").map(x=>x.trim()).includes(String(STU.grade));
+      if(!mine)return;
+      const pm=sl.label.match(/^period\s+(\d)$/i);
+      if(!pm){
+        push({kind:"fixed",fixed:true,start:toMin(sl.start),end:toMin(sl.end),name:sl.label});
+        return;
+      }
+      const item=(STU.days[String(info.cycle)]||[])[+pm[1]-1];
+      if(!item)return;
+      const cls=(T.classes||{})[item.p];if(!cls||cls.name==="Unscheduled")return;
+      if(cls.days&&cls.days.length&&cls.days.indexOf(info.cycle)===-1)return;
+      const le=cls.le||STU.latearly[item.p]||"Ea";
+      const late=le==="La"&&sl.start2&&sl.end2;
+      push({kind:"class",color:COLOR_MAP[cls.color]||cls.color||"#888",
+        start:toMin(late?sl.start2:sl.start),end:toMin(late?sl.end2:sl.end),hwPeriod:item.p,
+        name:cls.name,num:cls.num,sec:cls.sec,
+        room:cls.room,teacher:cls.teacher,
+        per:`${item.p}${le?(" - "+le):""}`,
+        teach:cls.teacher?`${cls.teacher}${cls.room?(" \u00b7 "+cls.room):""}`:""});
     });
   } else if(info&&info.school&&info.cycle&&T){
     (STU.days[String(info.cycle)]||[]).forEach(item=>{
@@ -1718,11 +1768,12 @@ async function renderMonth(){
     /* Name the day only when it is unusual. "Wednesday" under every Wednesday
        is thirty-odd words of nothing; a holiday or a special schedule is the
        whole reason to look at a month. */
-    const notable = info && info.name &&
-      (!school || (info.type!=="normal" && info.type!=="wednesday"));
+    const rtm=retimeOf(k);
+    const notable = rtm || (info && info.name &&
+      (!school || (info.type!=="normal" && info.type!=="wednesday")));
     cell.innerHTML=`<div><span class="mnum">${d.getDate()}</span>`
                   +`<span class="mday">${cyc}</span></div>`
-                  +(notable?`<div class="mname">${esc(info.name)}</div>`:"");
+                  +(notable?`<div class="mname">${esc(rtm||info.name)}</div>`:"");
     const it=itemsOn(d);
     // Project bars first: they are the shape of the month, the chips are detail
     /* A month cell is small, and a project covers most of them. So the bar is
@@ -2039,10 +2090,11 @@ async function renderList(){
     if(day.key===todayKey)hd.classList.add("today");
     const d=day.date, info=day.info;
     const cyc=info&&info.school&&info.cycle?`Day ${info.cycle}`:"";
-    const notable=info&&info.name&&(!info.school||(info.type!=="normal"&&info.type!=="wednesday"));
+    const rtl=retimeOf(day.key);
+    const notable=rtl||(info&&info.name&&(!info.school||(info.type!=="normal"&&info.type!=="wednesday")));
     hd.innerHTML=`<span>${day.key===todayKey?"Today \u00b7 ":""}${DOW[d.getDay()]} ${MON[d.getMonth()]} ${pad(d.getDate())}</span>`
       +(cyc?`<span class="lcyc">${esc(cyc)}</span>`:"")
-      +(notable?`<span class="lnote">${esc(info.name)}</span>`:"");
+      +(notable?`<span class="lnote">${esc(rtl||info.name)}</span>`:"");
     sec.appendChild(hd);
     day.rows.forEach(r=>{sec.appendChild(lrow(r));printed++;});
     gbody.appendChild(sec);
@@ -2086,7 +2138,7 @@ function render(){
     // Saturday and Sunday are simply not in the calendar file; that is not an
     // error, and "NA" made it look like one.
     const wknd=(d.getDay()===0||d.getDay()===6);
-    const nm=info?info.name:(wknd?"Weekend":"NA");
+    const nm=retimeOf(k)||(info?info.name:(wknd?"Weekend":"NA"));
     cell.innerHTML=`<div class="dow">${DOW[d.getDay()]}</div><div class="dnum">${MON[d.getMonth()]} ${pad(d.getDate())}</div><div class="dcyc">${esc(cyc)}</div><div class="dname">${esc(nm)}</div>`
       + (narrow?"":`<div class="dzoom">${ZOOM?"\u25c0 back to the week":"click to open this day"}</div>`);
     cell.title=ZOOM?"Back to the whole week":"Open this day on its own, full width";
@@ -2538,6 +2590,7 @@ function mergeSchool(){
   STU.finals=SCHOOL.finals||{};
   STU.publics=SCHOOL.publics||[];
   STU.special=SCHOOL.special||{};
+  STU.retime=SCHOOL.retime||{};
   applyPrefColors();
   if(STU.pref.time_format){IS12=STU.pref.time_format!=="24h";syncFmtSeg();
     /* mergeSchool() runs after the dialog's dropdowns are built, so relabel
@@ -3355,7 +3408,10 @@ document.addEventListener("keydown",e=>{
    Both write one line through /api/quick-add rather than making someone open
    the whole edit form for a single entry. */
 const qDlg=document.getElementById("quickDlg"), fullDlg=document.getElementById("fullDlg");
-const QTIMES=(()=>{const o=[];for(let m=7*60;m<=19*60;m+=5)o.push(fmtHM(m));return o;})();
+/* Same range as TIMES in templates/edit.html, and the same range the grid can
+   draw (AX_FLOOR .. AX_CEIL above). Three places that must agree; the grid is
+   the one that decides, the other two follow it. */
+const QTIMES=(()=>{const o=[];for(let m=AX_FLOOR;m<=AX_CEIL;m+=5)o.push(fmtHM(m));return o;})();
 function fmtHM(m){return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
 const QDURS=[10,15,20,25,30,40,45,50,60,75,90,120];
 const QDOWS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
