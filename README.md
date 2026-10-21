@@ -17,15 +17,26 @@ The interesting design decision is that there are two modes and **one app**.
 | | Account mode | Local mode |
 |---|---|---|
 | Where the schedule lives | a row in the server's SQLite database | the browser's `localStorage` |
-| What the server receives | the schedule text | nothing |
+| What the server stores | the schedule text | nothing |
+| What the server ever sees | the schedule text, on every save | nothing if it is typed in; with the PDF or `.ics` import, that file, read once and discarded |
 | Sign-up | school email address plus an emailed code | none |
 | Password | hashed with Werkzeug's PBKDF2 | there is no account |
 | Works across devices | yes | no, one browser on one device |
 | Recoverable if lost | yes, plus per-save version history | no, only from a backup the student exported |
 
 Local mode exists because "trust the operator with the data" is a weak answer
-to a privacy question and "the operator never receives the data" is a strong
-one. It is at `/local`.
+to a privacy question and "the operator never keeps the data" is a strong one.
+It is at `/local`.
+
+The one place local mode does touch the server is the import. Reading a
+Veracross PDF needs `pdfplumber`, which does not run in a browser, so the file
+is posted to `/api/parse-pdf`, parsed, and the text goes straight back; the
+`.ics` import works the same way. The app never saves the file or the result.
+(Werkzeug holds an upload in memory, or past 500 KB in an anonymous temporary
+file that is deleted when the request ends; nothing outlives the request.) What does get written is the visitor's IP address in the
+rate-limit table, because those two endpoints need no login and would
+otherwise have no brake; those rows are swept after about a day. A student who
+types their schedule in sends nothing at all.
 
 They are not two apps. There is exactly one branch point in the front end:
 

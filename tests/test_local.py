@@ -105,6 +105,23 @@ try:
     ck("/login" in r.geturl(),
        f"/app still sends a stranger to log in ({r.geturl()})")
 
+    print("\n[no page claims more privacy than local mode delivers]")
+    # The import buttons post the file to the server to be read. A page that
+    # says "nothing is sent to us" next to one of them is the kind of claim a
+    # careful reader catches once and then stops believing the rest.
+    OVER = ["nothing is sent", "never receive", "never sent", "no account and no server"]
+    for path in ["/", "/local", "/local/edit", "/login"]:
+        code, body = get(path)
+        low = body.lower()
+        hits = [o for o in OVER if o in low]
+        ck(not hits, f"{path} does not overclaim ({hits})")
+    code, body = get("/local/edit")
+    ck("send that file to us to be read" in body,
+       "and /local/edit says plainly that the imports send the file")
+    code, body = get("/local")
+    ck("nothing is kept" in body.lower(),
+       "/local says the import exception and that nothing is kept")
+
     print("\n[the caps are one number, not two]")
     code, body = get("/api/caps")
     caps = json.loads(body)
