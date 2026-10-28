@@ -1172,7 +1172,9 @@ def edit_import_ics_confirm():
             else:
                 lines[last:last] = [line, ""]
         else:
-            lines.insert(last + 1, line)
+            # after the last one's note lines, not between it and its note
+            end = _item_end(lines, last)
+            lines.insert(end, line)
     merged = "\n".join(lines)
     problem = schedule_text_problem(merged)
     if problem:
@@ -1194,6 +1196,52 @@ def _count_lines(text, prefix):
             if l.strip().startswith(prefix)]
 
 
+# Notes. An @event / @hw / @project line may be followed by lines starting
+# with ">" -- its note, one ">" per line:
+#     @hw C - before - Read ch.4 - 2026-10-29
+#       > p.112-140
+# They are separate lines rather than a trailing field because a note is free
+# text: the first " - " in one would split it into fields. Every line
+# operation below works on the ITEM (its line plus its note lines), never on
+# the bare line, or deleting something would orphan its note onto whatever
+# came before it. localApi() in app.html is the same logic for local mode.
+MAX_NOTE_CHARS = 2000
+
+
+def _item_end(lines, i):
+    """Index just past item i: its own line plus the note lines under it."""
+    j = i + 1
+    while j < len(lines) and lines[j].lstrip().startswith(">"):
+        j += 1
+    return j
+
+
+def _note_lines(note):
+    """The note as the lines that go under its item ([] for no note)."""
+    note = (note or "").replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+    if not note.strip():
+        return []
+    return [("  > " + l).rstrip() for l in note.split("\n")]
+
+
+def _note_text(lines, i):
+    """The note under item i, as plain text."""
+    return "\n".join(re.sub(r"^>\s?", "", l.strip())
+                     for l in lines[i + 1:_item_end(lines, i)])
+
+
+def _note_problem(data):
+    note = data.get("note")
+    if note is None:
+        return None
+    if not isinstance(note, str):
+        return "That note is not text."
+    if len(note) > MAX_NOTE_CHARS:
+        return (f"That note is {len(note)} characters; the limit is "
+                f"{MAX_NOTE_CHARS}. Nothing was saved.")
+    return None
+
+
 @app.route("/api/quick-add", methods=["POST"])
 @login_required
 def api_quick_add():
@@ -1213,6 +1261,9 @@ def api_quick_add():
         return jsonify({"error": "Nothing to add."}), 400
     if "\n" in line or "\r" in line:
         return jsonify({"error": "One line at a time."}), 400
+    problem = _note_problem(data)
+    if problem:
+        return jsonify({"error": problem}), 400
 
     prefix, cap = ("@event", MAX_EVENTS) if kind == "event" else ("@hw", MAX_HW)
     text = u["schedule_text"] or ""
@@ -1225,10 +1276,11 @@ def api_quick_add():
 
     lines = text.replace("\r\n", "\n").split("\n")
     if len(existing) >= cap:                    # confirmed: drop the first one
-        oldest = existing[0]
-        lines.remove(oldest)
+        first = next(i for i, l in enumerate(lines) if l.strip().startswith(prefix))
+        del lines[first:_item_end(lines, first)]   # and its note with it
 
     new_line = f"{prefix} {line}"
+    item = [new_line] + _note_lines(data.get("note"))
     # Put it with its own kind if any are there, else before the @pref trailer.
     last = max((i for i, l in enumerate(lines)
                 if l.strip().startswith(prefix)), default=None)
@@ -1236,11 +1288,13 @@ def api_quick_add():
         last = max((i for i, l in enumerate(lines)
                     if l.strip().startswith("@pref")), default=None)
         if last is None:
-            lines.append(new_line)
+            lines.extend(item)
         else:
-            lines[last:last] = [new_line, ""]
+            lines[last:last] = item + [""]
     else:
-        lines.insert(last + 1, new_line)
+        # after the last one's NOTE, not between it and its note
+        end = _item_end(lines, last)
+        lines[end:end] = item
 
     merged = "\n".join(lines)
     problem = schedule_text_problem(merged)
@@ -1271,14 +1325,16 @@ def api_quick_delete():
     lines = (u["schedule_text"] or "").replace("\r\n", "\n").split("\n")
     for i, l in enumerate(lines):
         if l.strip() == want.strip():
-            lines.pop(i)
+            note = _note_text(lines, i)
+            del lines[i:_item_end(lines, i)]
             break
     else:
         return jsonify({"error": "Couldn't find that one; it may already be gone."}), 404
 
     merged = "\n".join(lines)
     set_schedule(u, merged, remember=False)
-    return jsonify({"ok": True, "removed": want})
+    # the note goes back with the line, so Undo can restore both
+    return jsonify({"ok": True, "removed": want, "note": note})
 
 
 @app.route("/api/quick-done", methods=["POST"])
@@ -1336,6 +1392,11 @@ def api_quick_edit():
     new_line = (data.get("newline") or "").strip()
     if kind not in ("event", "hw") or not old_line or not new_line:
         return jsonify({"error": "Nothing to change."}), 400
+    if "\n" in new_line or "\r" in new_line:
+        return jsonify({"error": "One line at a time."}), 400
+    problem = _note_problem(data)
+    if problem:
+        return jsonify({"error": problem}), 400
     prefix = "@event" if kind == "event" else "@hw"
     want = old_line if old_line.startswith(prefix) else f"{prefix} {old_line}"
     repl = new_line if new_line.startswith(prefix) else f"{prefix} {new_line}"
@@ -1343,7 +1404,13 @@ def api_quick_edit():
     lines = (u["schedule_text"] or "").replace("\r\n", "\n").split("\n")
     for i, l in enumerate(lines):
         if l.strip() == want.strip():
-            lines[i] = repl
+            # no note (key missing or null) = leave the note alone: an older
+            # page that does not know about notes must not wipe them. An
+            # empty string is how a note is cleared.
+            if data.get("note") is not None:
+                lines[i:_item_end(lines, i)] = [repl] + _note_lines(data["note"])
+            else:
+                lines[i] = repl
             break
     else:
         return jsonify({"error": "Couldn't find that one; reload and try again."}), 404

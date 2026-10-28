@@ -68,8 +68,11 @@ B - French 2 - FR200 - 1 - Mr. Okafor - C 8 - purple - Ea
 @event 2026-11-01 - Application deadline - allday - red
 @project History Paper - 2026-09-07 - 2026-11-20 - yellow
 @hw E - before - Prospectus - 2026-09-17 - History Paper
+  > two pages, primary sources only
 @pref time_format = 12h
 ```
+
+Lines starting with `>` under an event, homework or project are its note.
 
 `@hw` hangs on a **rotation letter**, not a time, so a piece of homework
 follows its class around the rotation and lands correctly on a shortened

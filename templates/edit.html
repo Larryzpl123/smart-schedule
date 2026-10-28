@@ -158,6 +158,10 @@
           they cover rather than as a block:<br>
           <code>@project US History Paper - 2026-09-14 - 2027-01-15 - blue</code><br>
           Progress is counted from the homework attached to it, never typed in.<br><br>
+          <b style="color:var(--ink)">Notes</b> on any event, homework or project: lines
+          starting with <code>&gt;</code> right under it (or the <b>+ Note</b> button in the form):<br>
+          <code>@hw C - before - Read ch.4 - 2026-10-29</code><br>
+          <code>&nbsp;&nbsp;&gt; p.112-140, annotate as you go</code><br><br>
           <b style="color:var(--ink)">Optional per term:</b><br>
           <code>@immersive Your Move - IM327 - Mr. Lindqvist - MC 104 - indigo</code><br><br>
           <b style="color:var(--ink)">Sports</b> (max 8) are not part of a term:
@@ -231,19 +235,24 @@ document.getElementById("exampleBox").textContent=EXAMPLE;
 
 function parse(text){
   const model={name:"",form:"",timefmt:"12h",terms:[],sports:[],projects:[],events:[],hw:[]};
-  let cur=null, idx=0;
+  let cur=null, idx=0, noteTo=null;
   for(const raw of (text||"").split(/\r?\n/)){
     const line=raw.trim();
     if(!line||line.startsWith("#"))continue;
+    /* ">" lines are the note of the @event / @project / @hw right above.
+       They ride along inside that item's string ("line\n> note") so the
+       form row gets them; anything else in between ends the item. */
+    if(line.startsWith(">")){ if(noteTo){noteTo.arr[noteTo.i]+="\n"+line;} continue; }
+    noteTo=null;
     if(line.startsWith("@term")){const m=line.match(/^@term\s+(.*?)\s*=\s*([\d.]+)-([\d.]+)/);if(m){cur={label:m[1],from:m[2],to:m[3],classes:{},imm:"",sport:""};model.terms.push(cur);}continue;}
     if(line.startsWith("@immersive")){if(cur)cur.imm=line.replace("@immersive","").trim();continue;}
     /* Sports are per student, not per term: there are three seasons and only
        two semesters, and winter crosses January. Old files wrote them inside
        a @term block, so read them wherever they turn up. */
     if(line.startsWith("@sport")){model.sports.push(line.replace("@sport","").trim());continue;}
-    if(line.startsWith("@project")){model.projects.push(line.replace("@project","").trim());continue;}
-    if(line.startsWith("@event")){model.events.push(line.replace("@event","").trim());continue;}
-    if(line.startsWith("@hw")){model.hw.push(line.replace("@hw","").trim());continue;}
+    if(line.startsWith("@project")){model.projects.push(line.replace("@project","").trim());noteTo={arr:model.projects,i:model.projects.length-1};continue;}
+    if(line.startsWith("@event")){model.events.push(line.replace("@event","").trim());noteTo={arr:model.events,i:model.events.length-1};continue;}
+    if(line.startsWith("@hw")){model.hw.push(line.replace("@hw","").trim());noteTo={arr:model.hw,i:model.hw.length-1};continue;}
     if(line.startsWith("@pref")){const m=line.match(/time_format\s*=\s*(\w+)/);if(m)model.timefmt=m[1];continue;}
     if(/^[A-H]\s*-/.test(line)){if(cur){const p=line[0];cur.classes[p]=line.slice(1).replace(/^\s*-\s*/,"");}continue;}
     if(idx===0){model.name=line;idx++;continue;}
@@ -342,7 +351,7 @@ function formToText(){
     const v=sportRowToText(r); if(v){out.push(`@sport ${v}`);anySport=true;}
   });
   document.querySelectorAll("#projRows .prrow").forEach(r=>{
-    const v=projRowToText(r); if(v){out.push(`@project ${v}`);anySport=true;}
+    const v=projRowToText(r); if(v){out.push(`@project ${v}`,...noteOut(r));anySport=true;}
   });
   if(anySport)out.push("");
   document.querySelectorAll(".termcard").forEach(card=>{
@@ -377,10 +386,10 @@ function formToText(){
     out.push("");
   });
   document.querySelectorAll("#eventRows .evrow").forEach(r=>{
-    const v=eventRowToText(r); if(v)out.push(`@event ${v}`);
+    const v=eventRowToText(r); if(v)out.push(`@event ${v}`,...noteOut(r));
   });
   document.querySelectorAll("#hwRows .hwrow").forEach(r=>{
-    const v=hwRowToText(r); if(v)out.push(`@hw ${v}`);
+    const v=hwRowToText(r); if(v)out.push(`@hw ${v}`,...noteOut(r));
   });
   if(out[out.length-1]!=="")out.push("");
   out.push(`@pref time_format = ${tf}`);
@@ -858,6 +867,42 @@ function hwRowToText(wrap){
   if(done) out += " - done";
   return out;
 }
+
+/* ---- notes ----
+   Each event / project / homework row can carry a note: the ">" lines under
+   its line in the text. The row builders above know nothing about it; these
+   wrap them, peel the note off the item string parse() made, and give the
+   row a Note button and box. noteOut() writes it back in the same shape
+   app.py's _note_lines() does. */
+function splitNote(v){
+  const parts=String(v||"").split("\n");
+  return {line:parts[0], note:parts.slice(1).map(l=>l.trim().replace(/^>\s?/,"")).join("\n")};
+}
+function attachNote(wrap,note){
+  if(!wrap)return wrap;
+  const b=document.createElement("button");b.type="button";b.className="notebtn";
+  b.style.cssText="width:auto;margin:0;padding:.3rem .55rem;background:var(--panel2);color:var(--ink-dim);font-size:.7rem";
+  const ta=document.createElement("textarea");ta.className="rnote";ta.maxLength=2000;ta.rows=2;
+  ta.placeholder="Note (optional): page numbers, what to bring, links\u2026";
+  ta.style.cssText="flex-basis:100%;font-size:.76rem;resize:vertical;line-height:1.4";
+  ta.value=note||"";
+  const sync=()=>{b.textContent=ta.value.trim()?"Note \u2713":"+ Note";};
+  ta.style.display=ta.value.trim()?"":"none";
+  b.onclick=()=>{ta.style.display=ta.style.display==="none"?"":"none";if(ta.style.display==="")ta.focus();};
+  ta.addEventListener("input",sync); sync();
+  wrap.appendChild(b); wrap.appendChild(ta);
+  return wrap;
+}
+function noteOut(wrap){
+  const ta=wrap.querySelector(".rnote");
+  const note=(ta?ta.value:"").replace(/\r\n?/g,"\n").replace(/^\n+|\n+$/g,"");
+  if(!note.trim())return [];
+  return note.split("\n").map(l=>("  > "+l).replace(/\s+$/,""));
+}
+[["eventRow"],["hwRow"],["projRow"]].forEach(([fn])=>{
+  const inner=window[fn];
+  window[fn]=v=>{const n=splitNote(v);return attachNote(inner(n.line),n.note);};
+});
 
 function checkCaps(){
   const ne=document.querySelectorAll("#eventRows .evrow").length;

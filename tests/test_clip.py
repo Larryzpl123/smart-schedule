@@ -57,6 +57,13 @@ MEASURE = """() => {
     const kids = Array.from(blk.children).filter(e => !e.classList.contains('bextra'));
     if (!kids.length) return;
     const base = kids[0].offsetTop;
+    // A clamped name whose overflow is still visible paints the lines it
+    // "cut" underneath its own box. Its offsetHeight looks fine; only the
+    // overflow tells you the hidden lines are still on screen.
+    const nm = kids[0];
+    if (nm.scrollHeight > nm.clientHeight + 1 && getComputedStyle(nm).overflowY === 'visible')
+      out.push({block: nm.textContent.slice(0, 24), line: 'bname (clamped, overflow visible)',
+                overflowPx: nm.scrollHeight - nm.clientHeight});
     kids.forEach(el => {
       if (el.classList.contains('hid')) return;          // hidden = fine
       const over = (el.offsetTop + el.offsetHeight) - (base + avail);
@@ -69,6 +76,27 @@ MEASURE = """() => {
   });
   return out;
 }"""
+
+# A block whose TIMES overlap nothing else in its column must be drawn full
+# width. Patch 43 judged overlap by the stretched (22px) height, so two
+# back-to-back slots -- 10:05-10:15 then 10:15-10:50 on Oct 30, 08:15-08:25
+# then 08:25-08:35 on Convocation day -- were squeezed side by side as if they
+# clashed. Returns the offenders.
+SOLO = """() => {
+  const out = [];
+  document.querySelectorAll('#gbody .col').forEach(col => {
+    const cw = col.getBoundingClientRect().width;
+    const bs = Array.from(col.querySelectorAll('.block:not(.dayfull)'))
+      .map(el => ({el, s: +el.dataset.start, e: +el.dataset.end}))
+      .filter(b => Number.isFinite(b.s) && Number.isFinite(b.e));
+    bs.forEach(b => {
+      const clash = bs.some(c => c !== b && c.s < b.e && b.s < c.e);
+      const share = b.el.getBoundingClientRect().width / cw;
+      if (!clash && share < 0.8) out.push({name: b.el.querySelector('.bname').textContent.slice(0, 24),
+                                           share: Math.round(share * 100)});
+    });
+  });
+  return out; }"""
 
 try:
     from playwright.sync_api import sync_playwright
@@ -102,6 +130,13 @@ try:
 
         bad = pg.evaluate(MEASURE)
         ck(not bad, f"nothing is left half-cut on Convocation day ({bad[:3]})")
+        solo = pg.evaluate(SOLO)
+        ck(not solo, f"Convocation day: blocks whose times clash with nothing are full width ({solo[:3]})")
+        tens = pg.evaluate("""() => Array.from(document.querySelectorAll('#gbody .block:not(.dayfull)'))
+          .filter(b => +b.dataset.end - +b.dataset.start === 10).length""")
+        # (this test user is a senior, so only the 08:15-08:25 slot shows; the
+        # back-to-back pair is grades 9-11 -- covered by the 10-minute section below)
+        ck(tens >= 1, f"...and that day really has a 10-minute slot to test ({tens})")
 
         # something IS being hidden -- otherwise the test proves nothing
         hidden = pg.eval_on_selector_all("#gbody .block .hid", "n => n.length")
@@ -148,6 +183,80 @@ try:
         pg.wait_for_timeout(500)
         bad3 = pg.evaluate(MEASURE)
         ck(not bad3, f"still nothing half-cut after a resize ({bad3[:3]})")
+
+        # ---- a 10-minute slot with something starting right after it ----
+        # Oct 30: "Student Meeting" 10:05-10:15, then the Immersives Fair at
+        # 10:15. A block is never drawn under MIN_BLOCK_PX (22px), so the 10px
+        # meeting reached 11px into the Fair -- whose times do not overlap, so
+        # layoutOverlaps() put both full width and the Fair was painted over
+        # the meeting's name, cutting it in half.
+        pg.set_viewport_size({"width": 1280, "height": 900})
+        pg.goto(BASE + "/edit")
+        pg.click("#modeText")
+        pg.fill("#rawText", SCHEDULE.replace("@pref",
+            "@event 2026-09-08 - Student Meeting with the Head of School - 15:30-15:40 - gray\n"
+            "@event 2026-09-08 - Fair right after - 15:40-16:15 - gray\n"
+            "@event 2026-09-08 - Lone ten - 17:00-17:10 - gray\n"
+            "@event 2026-09-08 - Gap ten - 17:30-17:40 - gray\n"
+            "@event 2026-09-08 - After gap - 17:45-18:00 - gray\n"
+            "@event 2026-09-08 - Clash one - 19:00-20:00 - gray\n"
+            "@event 2026-09-08 - Clash two - 19:30-20:30 - gray\n@pref"))
+        pg.click('button[type=submit]')
+        pg.wait_for_load_state()
+        pg.goto(BASE + "/app")
+        pg.wait_for_selector("#gbody .col", timeout=8000)
+        pg.wait_for_timeout(300)
+        bad4 = pg.evaluate(MEASURE)
+        ck(not bad4, f"no line half-cut on a day with 10-minute blocks ({bad4[:3]})")
+        solo4 = pg.evaluate(SOLO)
+        ck(not solo4, f"back-to-back blocks are NOT put side by side ({solo4[:3]})")
+        g = pg.evaluate("""() => {
+          const out = {};
+          document.querySelectorAll('#gbody .block:not(.dayfull)').forEach(b => {
+            const n = b.querySelector('.bname'), t = n ? n.textContent : '';
+            const k = t.startsWith('Student Meeting') ? 'meet' : t === 'Fair right after' ? 'fair'
+                    : t === 'Lone ten' ? 'lone' : t === 'Gap ten' ? 'gap' : t === 'After gap' ? 'after'
+                    : t === 'Clash one' ? 'c1' : t === 'Clash two' ? 'c2' : null;
+            if (!k) return;
+            const r = b.getBoundingClientRect(), nr = n.getBoundingClientRect(),
+                  col = b.closest('.col').getBoundingClientRect();
+            out[k] = {l: r.left, r: r.right, t: r.top, b: r.bottom,
+                      nameInside: nr.top >= r.top - 0.5 && nr.bottom <= r.bottom + 0.5,
+                      h: r.height, micro: b.classList.contains('micro'),
+                      share: Math.round(r.width / col.width * 100)};
+          });
+          return out; }""")
+        m, f, lone = g.get("meet"), g.get("fair"), g.get("lone")
+        hit = (m and f and m["l"] < f["r"] and f["l"] < m["r"]
+               and m["t"] < f["b"] and f["t"] < m["b"])
+        ck(m and f and not hit,
+           f"the 10-minute block and the one starting right after it are not "
+           f"drawn on top of each other ({m}, {f})")
+        ck(m and m["nameInside"], f"its name sits wholly inside its own box ({m})")
+        ck(lone and lone["share"] > 80,
+           f"a 10-minute block with nothing after it keeps the full width ({lone})")
+        ck(m and f and m["share"] > 80 and f["share"] > 80,
+           f"the 10-minute block and the one right after it are both full width ({m and m['share']}, {f and f['share']})")
+        ck(m and m["micro"] and m["b"] <= f["t"] + 0.5,
+           f"with no room to stretch it keeps its true height and goes .micro ({m})")
+        ck(lone and not lone["micro"] and lone["h"] >= 21.5,
+           f"with empty space below, a 10-minute block is stretched to readable size ({lone})")
+        ga, af = g.get("gap"), g.get("after")
+        ck(ga and af and ga["b"] <= af["t"] + 0.5 and ga["h"] > 11 and af["share"] > 80,
+           f"a 5-minute gap: stretched only as far as the next block, never into it ({ga}, {af})")
+        c1, c2 = g.get("c1"), g.get("c2")
+        ck(c1 and c2 and c1["share"] < 60 and c2["share"] < 60,
+           f"blocks whose times really clash are still side by side ({c1 and c1['share']}, {c2 and c2['share']})")
+        pg.hover("#gbody .block >> text=Student Meeting")
+        pg.wait_for_timeout(250)
+        hov = pg.evaluate("""() => { const b = document.querySelector('#gbody .block:hover');
+          return b ? Math.round(b.getBoundingClientRect().height) : 0; }""")
+        ck(hov > 40, f"hovering it opens it out to full size ({hov}px)")
+        pg.mouse.move(0, 0)
+        pg.set_viewport_size({"width": 400, "height": 900})
+        pg.wait_for_timeout(600)
+        bad5 = pg.evaluate(MEASURE)
+        ck(not bad5, f"and nothing half-cut at phone width, where the long name wraps ({bad5[:3]})")
 
         ck(not errs, f"no page errors: {errs}")
         b.close()

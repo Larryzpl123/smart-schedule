@@ -99,7 +99,7 @@
 
   .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;padding:.8rem 1.4rem;border-bottom:1px solid var(--line)}
   .nav{display:flex;align-items:center;gap:.5rem}
-  button,select,input{font-family:inherit;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.45rem .7rem;font-size:.8rem;cursor:pointer;transition:.15s}
+  button,select,input,textarea{font-family:inherit;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.45rem .7rem;font-size:.8rem;cursor:pointer;transition:.15s}
   button:hover,select:hover{border-color:var(--accent);color:var(--accent)}
   .arrow{font-size:1rem;width:2.4rem;height:2.2rem;display:grid;place-items:center}
   .wklabel{min-width:14rem;text-align:center;color:var(--ink-dim);font-size:.82rem}
@@ -187,6 +187,18 @@
   .hwmenu button{display:block;width:100%;margin:0;text-align:left;background:none;
                  color:var(--ink);border:0;padding:.4rem .55rem;font-size:.74rem;border-radius:6px}
   .hwmenu button:hover{background:var(--panel2)}
+  /* Notes. A small mark on anything that has one; the text itself is in the
+     hover / tap expansion, the click menu, the list, and the tooltip. */
+  .hwmenu .mnote{font-size:.72rem;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;
+    max-width:18rem;max-height:12rem;overflow:auto;padding:.1rem .55rem .45rem;
+    border-bottom:1px solid var(--line);margin-bottom:.2rem}
+  /* "\2261" (three bars, "there is text here") rather than a notepad emoji:
+     a font without emoji draws that as an empty box. */
+  .block.hasnote .bname::after,.hw.hasnote::after,.pbar.hasnote::after{content:" \2261";font-weight:400;opacity:.75}
+  .block .bnote{white-space:pre-wrap;overflow-wrap:anywhere;opacity:.85;font-style:italic;margin-top:.15rem;
+    display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden}
+  .lrow .lnote{grid-column:3/-1;font-size:.7rem;color:var(--ink-dim);white-space:pre-wrap;
+    overflow-wrap:anywhere;line-height:1.45;margin-top:-.15rem}
   .hwmenu .ttl{font-size:.62rem;color:var(--ink-dim);padding:.25rem .55rem .35rem;
                max-width:14rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
@@ -242,6 +254,10 @@
   /* A 25-minute block is ~26px tall; the normal .35rem padding eats half of
      that and clips even one line of text. Short blocks get thin padding. */
   .block.tight{padding:.15rem .45rem}
+  /* Too short to stretch (see MIN_BLOCK_PX): one small line, name only.
+     Hover / tap give it the normal look back, via the usual min-height. */
+  .block.micro:not(:hover):not(.open){padding:0 .4rem}
+  .block.micro:not(:hover):not(.open) .bname{font-size:9px!important;line-height:1!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .block.tight .bname{font-size:.68rem}
   .block:not(.dayfull):hover.tight{padding:.35rem .45rem}
   .block .hid{display:none}
@@ -500,6 +516,9 @@
   <div class="row" id="qDateRow"><label>Date</label>
     <span id="qDate" style="font-size:.8rem"></span>
     <input type="date" id="qDateIn" style="flex:1;display:none"></div>
+  <div class="row" id="qNoteRow" style="align-items:flex-start"><label>Notes</label>
+    <textarea id="qNote" rows="3" maxlength="2000" placeholder="Optional: page numbers, what to bring, links&hellip;"
+      style="flex:1;resize:vertical;cursor:text;line-height:1.4"></textarea></div>
   <div id="qRepeat" style="font-size:.72rem;color:var(--ink-dim);margin-bottom:.5rem;display:none"></div>
   <div id="qMsg" style="font-size:.72rem;color:#ff6b6b;margin-bottom:.5rem"></div>
   <div class="row" style="justify-content:flex-end">
@@ -1106,9 +1125,18 @@ function parseStudent(txt){
   const s={name:"",form:"",classes:{},latearly:{},days:{},fixed:[],imm:null,immBlocks:[],sports:[],publics:[],special:{},retime:{},events:[],hw:[],projects:[],pref:{},terms:[]};
   let idx=0, curTerm=null;
   const ensureTerm=()=>{ if(!curTerm){curTerm={label:"All Year",from:null,to:null,classes:{},imm:null,sports:[]};s.terms.push(curTerm);} return curTerm; };
+  /* The item a ">" note line belongs to: the @event / @project / @hw right
+     above it. Any other line in between ends that, so a stray ">" can never
+     be read as somebody's name (idx 0) or hang off the wrong thing. */
+  let noteTo=null;
   for(const raw of txt.split(/\r?\n/)){
     const line=raw.trim();
     if(!line||line.startsWith("#")) continue;
+    if(line.startsWith(">")){
+      if(noteTo){const t=line.replace(/^>\s?/,"");noteTo.note=noteTo.note==null?t:noteTo.note+"\n"+t;}
+      continue;
+    }
+    noteTo=null;
     if(line.startsWith("@finals")){const m=line.match(/^@finals\s+(\d{2}\.\d{2})\s*\|\s*([^|]+?)\s*\|\s*(.*?)\s*-\s*(\d{1,2}:\d{2})-(\d{1,2}:\d{2})/);if(m){s.finals=s.finals||{};(s.finals[m[1]]=s.finals[m[1]]||[]).push({grades:m[2].trim(),label:m[3].trim(),start:m[4],end:m[5]});}continue;}
     if(line.startsWith("@term")){const m=line.match(/^@term\s+(.*?)\s*=\s*(\d{2}\.\d{2})-(\d{2}\.\d{2})/);if(m){curTerm={label:m[1],from:m[2],to:m[3],classes:{},imm:null,sports:[]};s.terms.push(curTerm);}continue;}
     if(line.startsWith("@immersive")){const p=line.replace("@immersive","").trim().split(" - ").map(x=>x.trim());const im={name:p[0],num:p[1],teacher:p[2],room:p[3],color:p[4]||"indigo"};if(s.terms.length){ensureTerm().imm=im;}else s.imm=im;continue;}
@@ -1161,7 +1189,7 @@ function parseStudent(txt){
         }
         ev.color=rest[0]||"gray";
         ev.src=line.replace(/^@event\s*/,"").trim();   // for delete-by-line
-        s.events.push(ev);
+        s.events.push(ev); noteTo=ev;
       }
       continue;
     }
@@ -1175,7 +1203,7 @@ function parseStudent(txt){
     if(line.startsWith("@project")){
       const p=line.replace("@project","").trim().split(" - ").map(x=>x.trim());
       if(p[0]&&/^\d{4}-\d{2}-\d{2}$/.test(p[1]||"")&&/^\d{4}-\d{2}-\d{2}$/.test(p[2]||""))
-        s.projects.push({name:p[0],from:p[1],to:p[2],color:p[3]||"blue",
+        s.projects.push(noteTo={name:p[0],from:p[1],to:p[2],color:p[3]||"blue",
                          src:line.replace(/^@project\s*/,"").trim()});
       continue;
     }
@@ -1188,7 +1216,7 @@ function parseStudent(txt){
         const tail=p.slice(4).filter(x=>x!=="");
         const done=tail.some(x=>x.toLowerCase()==="done");
         const proj=tail.find(x=>x.toLowerCase()!=="done")||"";
-        s.hw.push({period:p[0],when:(p[1]||"before").toLowerCase(),name:p[2]||"Homework",
+        s.hw.push(noteTo={period:p[0],when:(p[1]||"before").toLowerCase(),name:p[2]||"Homework",
                    date:p[3],proj:proj,done:done,
                    src:line.replace(/^@hw\s*/,"").trim()});
       }
@@ -1641,7 +1669,7 @@ function daySpecs(d){
     STU.events.forEach(ev=>{
       if(ev.allday)return;
       if(!eventOn(ev,d))return;
-      push({kind:"event",color:COLOR_MAP[ev.color]||ev.color||"#8b95a7",start:toMin(ev.start),end:toMin(ev.end),name:ev.name,per:"My event",srcKind:"event",src:ev.src});
+      push({kind:"event",color:COLOR_MAP[ev.color]||ev.color||"#8b95a7",start:toMin(ev.start),end:toMin(ev.end),name:ev.name,per:"My event",srcKind:"event",src:ev.src,note:ev.note});
     });
   }
   /* Homework markers. Hung on a period letter, so find where that letter
@@ -1699,6 +1727,14 @@ function projStat(pr){
 const AX_DEF_START=8*60, AX_DEF_END=18*60, AX_FLOOR=6*60, AX_CEIL=23*60;
 let AX_START=AX_DEF_START, AX_END=AX_DEF_END;
 const PX_PER_MIN=1.05;
+/* A short block is stretched to this height so a 10-minute slot is not a
+   10px sliver -- but only into EMPTY space. Overlap is decided by real times
+   (patch 43 decided it by the stretched height instead, and so put two
+   back-to-back slots, 10:05-10:15 and 10:15-10:50, side by side as if they
+   clashed). When the next block starts too soon to stretch, the block keeps
+   its true height and gets .micro: one small line, the rest on hover/tap.
+   All of it is decided in layoutOverlaps() from the times, not measured. */
+const MIN_BLOCK_PX=22;
 let BODY_H=(AX_END-AX_START)*PX_PER_MIN;
 function setAxis(startMin,endMin){
   AX_START=startMin; AX_END=endMin;
@@ -1786,7 +1822,8 @@ async function renderMonth(){
     it.projects.forEach(pr=>{
       const st=projStat(pr);
       const tip=`${pr.name} · ${pr.from} to ${pr.to}`
-        +(st.total?` · ${st.done} of ${st.total} milestones done`:"");
+        +(st.total?` · ${st.done} of ${st.total} milestones done`:"")
+        +(pr.note?"\n\n"+pr.note:"");
       // ...and only for the month actually on screen, not for the spill days
       // of the next one, which would name the same project twice in one grid
       const named=(k===pr.from)
@@ -1862,6 +1899,13 @@ function lrow(o){
   const g=document.createElement("div");g.className="ltag";g.textContent=o.tag||"";
   el.title=o.title||(o.name+(o.tag?" \u2014 "+o.tag:""));
   [t,dot,n,g].forEach(x=>el.appendChild(x));
+  /* The list is where a note is actually READ, so it is printed in full
+     under the row rather than hidden in a tooltip. */
+  if(o.note){
+    el.classList.add("hasnote");
+    const nt=document.createElement("div");nt.className="lnote";nt.textContent=o.note;
+    el.appendChild(nt);
+  }
   return el;
 }
 
@@ -1873,7 +1917,7 @@ function lrow(o){
    code -- because "Rivera" and "R 210" are exactly the things somebody
    searches for and neither of them is on screen. */
 function rowMatches(r,q){
-  return ((r.name||"")+" "+(r.tag||"")+" "+(r.find||"")).toLowerCase()
+  return ((r.name||"")+" "+(r.tag||"")+" "+(r.find||"")+" "+(r.note||"")).toLowerCase()
          .indexOf(q)!==-1;
 }
 function listRowsFor(d,scope){
@@ -1882,7 +1926,7 @@ function listRowsFor(d,scope){
   (STU.events||[]).forEach(ev=>{
     if(!ev.allday||!eventOn(ev,d))return;
     rows.push({sort:-1,time:"all day",color:COLOR_MAP[ev.color]||ev.color||"#8b95a7",
-      name:ev.name,tag:"event",src:ev.src,srcKind:"event"});
+      name:ev.name,tag:"event",src:ev.src,srcKind:"event",note:ev.note});
   });
   (STU.projects||[]).forEach(pr=>{
     const k=dkey(d), st=projStat(pr);
@@ -1891,15 +1935,15 @@ function listRowsFor(d,scope){
        click menu as an event would offer a Delete that /api/quick-delete
        does not implement. */
     if(k===pr.from)rows.push({sort:-2,time:"starts",color:col,name:pr.name,
-      tag:`project \u00b7 ${st.done}/${st.total} done`});
+      tag:`project \u00b7 ${st.done}/${st.total} done`,note:pr.note});
     if(k===pr.to)rows.push({sort:-2,time:"due",color:col,name:pr.name,
-      tag:`project \u00b7 ${st.done}/${st.total} done`});
+      tag:`project \u00b7 ${st.done}/${st.total} done`,note:pr.note});
   });
   sp.hw.forEach(x=>{
     const h=x.h;
     rows.push({sort:x.start,time:fmtTime(x.start,IS12),
       color:h.done?"#7f8794":"#ffb061",done:h.done,
-      name:h.name,src:h.src,srcKind:"hw",
+      name:h.name,src:h.src,srcKind:"hw",note:h.note,
       find:[x.cls.name,x.cls.teacher,x.cls.room,h.proj].filter(Boolean).join(" "),
       tag:`${h.when==="during"?"in class":"due"} \u00b7 ${h.period} ${x.cls.name}`
           +(h.proj?` \u00b7 ${h.proj}`:"")});
@@ -1912,7 +1956,7 @@ function listRowsFor(d,scope){
   (STU.hw||[]).forEach(h=>{
     if(h.date!==dkey(d)||placed.indexOf(h.src)!==-1)return;
     rows.push({sort:-3,time:"\u2014",color:h.done?"#7f8794":"#ffb061",done:h.done,
-      name:h.name,src:h.src,srcKind:"hw",
+      name:h.name,src:h.src,srcKind:"hw",note:h.note,
       tag:`${h.when==="during"?"in class":"due"} \u00b7 ${h.period}`
           +(h.proj?` \u00b7 ${h.proj}`:"")+" \u00b7 no class that day",
       title:`${h.name} is dated to a day period ${h.period} does not meet, so `
@@ -1927,7 +1971,7 @@ function listRowsFor(d,scope){
     if(b.kind==="fixed"&&scope!=="all")return;
     rows.push({sort:b.start,time:fmtTime(b.start,IS12),
       color:b.color||"#8b95a7",name:b.name,
-      src:b.src,srcKind:b.srcKind,
+      src:b.src,srcKind:b.srcKind,note:b.note,
       find:[b.teacher,b.room,b.num,b.sec,b.per].filter(Boolean).join(" "),
       tag:b.kind==="class"?(b.per||"class"):
           b.kind==="sport"?"athletics":
@@ -2173,7 +2217,8 @@ function render(){
         on:k=>k>=pr.from&&k<=pr.to,
         label:`${pr.name}${st.total?`  ${st.done}/${st.total}`:""}`,
         title:`${pr.name} \u00b7 ${pr.from} to ${pr.to}`
-          +(st.total?` \u00b7 ${st.done} of ${st.total} milestones done`:"")});
+          +(st.total?` \u00b7 ${st.done} of ${st.total} milestones done`:"")
+          +(pr.note?"\n\n"+pr.note:""), note:pr.note});
     });
     /* An all-day event is one day wide, so none of the reasoning above applies
        to it: if it is in this week, it is shown. */
@@ -2186,7 +2231,8 @@ function render(){
       rows.push({from:hit[0],to:hit[hit.length-1],color:ev.color||"gray",
         single:true, src:ev.src, srcKind:"event",
         on:k=>hit.indexOf(k)!==-1, label:ev.name, name:ev.name,
-        title:`${ev.name} \u00b7 all day. Click for edit / delete.`});
+        title:`${ev.name} \u00b7 all day. Click for edit / delete.`+(ev.note?"\n\n"+ev.note:""),
+        note:ev.note});
     });
     /* One ROW PER ITEM made the band as tall as the number of all-day things
        in the week, with every row nearly all empty -- a deadline on Tuesday
@@ -2236,6 +2282,7 @@ function render(){
             const firstShown=row.single||(k===row.from)||(dkey(days[0])===k);
             bar.textContent=firstShown?row.label:" ";
             bar.title=row.title;
+            if(row.note&&firstShown)bar.classList.add("hasnote");   // once, beside the name
             if(row.src){
               bar.dataset.src=row.src; bar.dataset.srckind=row.srcKind;
               bar.dataset.name=row.name; bar.style.cursor="pointer";
@@ -2285,7 +2332,9 @@ function render(){
       hwEl.textContent=(h.done?"\u2713 ":(h.when==="during"?"\u25cf in class: ":"\u270e due: "))
                        +h.name+(h.proj?" \u00b7 "+h.proj:"");
       hwEl.title=`${h.name} (${h.when==="during"?"do in class":"due before class"}, period ${h.period}, ${x.cls.name})`
-        +(h.proj?` \u2014 part of ${h.proj}`:"")+`. Click for done / delete.`;
+        +(h.proj?` \u2014 part of ${h.proj}`:"")+`. Click for done / delete.`
+        +(h.note?"\n\n"+h.note:"");
+      if(h.note)hwEl.classList.add("hasnote");
       hwEl.dataset.src=h.src; hwEl.dataset.srckind="hw";
       const host=Array.from(col.querySelectorAll(".block")).find(bl =>
         bl.dataset.period===h.period && Number(bl.dataset.start)===x.start);
@@ -2354,6 +2403,18 @@ function layoutOverlaps(){
       .map(el=>({el,start:+el.dataset.start,end:+el.dataset.end}))
       .filter(b=>Number.isFinite(b.start)&&Number.isFinite(b.end))
       .sort((a,b)=>a.start-b.start||a.end-b.end);
+    /* Height: true length, stretched toward MIN_BLOCK_PX but never past the
+       start of the next block that begins after this one ends. Anything that
+       starts before it ends overlaps it and sits in another lane, so it is
+       not in the way. */
+    blocks.forEach(b=>{
+      const dur=(b.end-b.start)*PX_PER_MIN;
+      let room=Infinity;
+      blocks.forEach(c=>{if(c!==b&&c.start>=b.end)room=Math.min(room,(c.start-b.start)*PX_PER_MIN);});
+      const h=Math.max(dur,Math.min(MIN_BLOCK_PX,room));
+      b.el.style.height=h+"px";
+      b.el.classList.toggle("micro",h<MIN_BLOCK_PX);
+    });
     blocks_clear(col);
     let run=[], lanes=[], sized=[];
     const flush=()=>{
@@ -2412,6 +2473,7 @@ function clipBlocks(){
     blk.classList.toggle("tight", blk.getBoundingClientRect().height < 34);
     const nameEl=kids[0];
     nameEl.style.webkitLineClamp=""; nameEl.style.display=""; nameEl.style.webkitBoxOrient="";
+    nameEl.style.overflow="";
     const cs=getComputedStyle(blk);
     /* Sub-pixel grace: a line overflowing by a hair is invisible (it runs into
        the padding, which is inside the clipping box anyway), and dropping a
@@ -2427,6 +2489,11 @@ function clipBlocks(){
       nameEl.style.display="-webkit-box";
       nameEl.style.webkitBoxOrient="vertical";
       nameEl.style.webkitLineClamp=String(lines);
+      /* line-clamp shortens the BOX; without overflow:hidden the lines it
+         cut off are still painted underneath it, and whatever padding is
+         left shows the top half of the next one (Oct 30, half-width
+         a long "Student Meeting with ..." name wrapping to a second line). */
+      nameEl.style.overflow="hidden";
     }
     let over=false;
     for(let i=1;i<kids.length;i++){
@@ -2485,7 +2552,7 @@ function addBlock(col,k,todayKey,nowMin,o){
   if(o.src){blk.dataset.src=o.src;blk.dataset.srckind=o.srcKind;}
   if(!o.fixed)blk.style.setProperty("--blk",o.color);
   blk.style.top=top+"px";
-  blk.style.height=Math.max(dur,22)+"px"; // true duration, touches dismissal line
+  blk.style.height=dur+"px"; // true duration; layoutOverlaps() stretches short ones into free space
   const t1=fmtTime(o.start,IS12), t2=fmtTime(o.end,IS12);
   /* "3:45 PM - 4:45 PM" is seventeen characters and does not fit beside a
      period letter in a seven-day column. When both ends share a meridiem the
@@ -2513,9 +2580,11 @@ function addBlock(col,k,todayKey,nowMin,o){
      line is never the only copy of a room number. */
   blk.title=[o.name,`${t1} \u2013 ${t2}`,o.per,
              o.num?(o.num+(o.sec?(" \u00b7 "+o.sec):"")):"",o.teach]
-            .filter(Boolean).join(" \u00b7 ");
+            .filter(Boolean).join(" \u00b7 ")+(o.note?"\n\n"+o.note:"");
+  if(o.note)blk.classList.add("hasnote");
   if(o.num)lines.push(`<div class="bnum">${esc(o.num)}${o.sec?(" \u00b7 "+esc(o.sec)):""}</div>`);
   if(o.teach)lines.push(`<div class="bteach">${esc(o.teach)}</div>`);
+  if(o.note)lines.push(`<div class="bnote">${esc(o.note)}</div>`);
   const nHead=o.fixed?1:3;
   const head=lines.slice(0,nHead).join(""), extra=lines.slice(nHead).join("");
   blk.innerHTML=head+(extra?`<div class="bextra">${extra}</div>`:"");
@@ -3274,7 +3343,7 @@ function buildICS(opts){
       const loc=b.room||"";
       const extra=[];
       if(loc)extra.push("LOCATION:"+icsEsc(loc));
-      const desc=[b.per,b.teacher].filter(Boolean).join(" \u00b7 ");
+      const desc=[b.per,b.teacher].filter(Boolean).join(" \u00b7 ")+(b.note?"\n\n"+b.note:"");
       if(desc)extra.push("DESCRIPTION:"+icsEsc(desc));
       timed(d,b.start,b.end,b.name,extra,`${k}|${b.start}|${b.name}|${b.kind}`);
     });
@@ -3284,7 +3353,7 @@ function buildICS(opts){
         timed(d,x.start,x.start+15,
           (h.done?"\u2713 ":"")+(h.when==="during"?"In class: ":"Due: ")+h.name,
           ["DESCRIPTION:"+icsEsc(`Period ${h.period} \u00b7 ${x.cls.name}`
-             +(h.proj?` \u00b7 part of ${h.proj}`:""))],
+             +(h.proj?` \u00b7 part of ${h.proj}`:"")+(h.note?"\n\n"+h.note:""))],
           `${k}|hw|${h.src}`);
       });
       // and the ones whose period does not meet that day: no time, so all-day
@@ -3292,13 +3361,13 @@ function buildICS(opts){
       (STU.hw||[]).forEach(h=>{
         if(h.date!==k||placed.indexOf(h.src)!==-1)return;
         allday(d,d,(h.done?"\u2713 ":"Due: ")+h.name,
-          ["DESCRIPTION:"+icsEsc(`Period ${h.period}`)],`${k}|hw|${h.src}`);
+          ["DESCRIPTION:"+icsEsc(`Period ${h.period}`+(h.note?"\n\n"+h.note:""))],`${k}|hw|${h.src}`);
       });
     }
     if(opts.events){
       (STU.events||[]).forEach(e2=>{
         if(!e2.allday||!eventOn(e2,d))return;
-        allday(d,d,e2.name,[],`${k}|allday|${e2.src}`);
+        allday(d,d,e2.name,e2.note?["DESCRIPTION:"+icsEsc(e2.note)]:[],`${k}|allday|${e2.src}`);
       });
     }
     d.setDate(d.getDate()+1);
@@ -3310,7 +3379,8 @@ function buildICS(opts){
       if(to<opts.from||from>opts.to)return;
       const st=projStat(pr);
       allday(from,to,pr.name,
-        ["DESCRIPTION:"+icsEsc(`Project \u00b7 ${st.done} of ${st.total} milestones done`),
+        ["DESCRIPTION:"+icsEsc(`Project \u00b7 ${st.done} of ${st.total} milestones done`
+                               +(pr.note?"\n\n"+pr.note:"")),
          "TRANSP:TRANSPARENT"],`proj|${pr.src}`);
     });
   }
@@ -3567,6 +3637,7 @@ function openEdit(kind,src){
   const parsed = kind==="hw" ? parseHwSrc(src) : parseEventSrc(src);
   if(!parsed){setStatus("That line was hand-written; edit it in Edit my schedule.");return;}
   QCTX={kind:kind,edit:true,src:src,shape:parsed};
+  document.getElementById("qNote").value=noteFor(kind,src);
   const hw=kind==="hw";
   document.getElementById("qTitle").textContent=hw?"Homework":"Event";
   document.getElementById("qName").value=parsed.name||"";
@@ -3632,6 +3703,12 @@ function openEdit(kind,src){
   qDlg.showModal();
   setTimeout(()=>document.getElementById("qName").focus(),30);
 }
+/* The note of one of the student's own items, found by its line. */
+function noteFor(kind,src){
+  const list=(STU&&(kind==="hw"?STU.hw:kind==="project"?STU.projects:STU.events))||[];
+  const it=list.find(x=>x.src===src);
+  return (it&&it.note)||"";
+}
 function editedLine(){
   const name=document.getElementById("qName").value.trim();
   if(!name)return null;
@@ -3674,6 +3751,7 @@ function openQuick(ctx){
   if(!BACKEND||!STU){setStatus("Log in and add your schedule first.");return;}
   QCTX=ctx;
   const hw=ctx.kind==="hw";
+  document.getElementById("qNote").value="";
   document.getElementById("qDelete").style.display="none";
   document.getElementById("qDone").style.display="none";
   document.getElementById("qPerRow").style.display="none";
@@ -3736,6 +3814,25 @@ async function api(path,payload){
    a line, toggle a trailing "done", replace a line -- because this is the one
    piece of logic that exists twice (Python on a database row, JavaScript on a
    string) and the way to keep two copies honest is to keep them tiny. */
+/* Notes: ">" lines under an item. Same three helpers as _item_end /
+   _note_lines / _note_text in app.py -- see the comment there. */
+const MAX_NOTE_CHARS=2000;
+function itemEnd(lines,i){let j=i+1;while(j<lines.length&&lines[j].trimStart().startsWith(">"))j++;return j;}
+function noteLines(note){
+  note=String(note==null?"":note).replace(/\r\n?/g,"\n").replace(/^\n+|\n+$/g,"");
+  if(!note.trim())return [];
+  return note.split("\n").map(l=>("  > "+l).replace(/\s+$/,""));
+}
+function noteTextAt(lines,i){
+  return lines.slice(i+1,itemEnd(lines,i)).map(l=>l.trim().replace(/^>\s?/,"")).join("\n");
+}
+function noteProblem(p){
+  if(p.note==null)return null;
+  if(typeof p.note!=="string")return "That note is not text.";
+  if(p.note.length>MAX_NOTE_CHARS)
+    return `That note is ${p.note.length} characters; the limit is ${MAX_NOTE_CHARS}. Nothing was saved.`;
+  return null;
+}
 function localApi(path,p){
   const prefix = p.kind==="hw" ? "@hw" : "@event";
   const cap = p.kind==="hw" ? CAPS.hw : CAPS.events;
@@ -3743,21 +3840,28 @@ function localApi(path,p){
   const countOf = pre => lines.filter(l=>l.trim().startsWith(pre)).length;
   const want = (l,pre) => l.startsWith(pre) ? l : `${pre} ${l}`;
 
+  const np = (path==="/api/quick-add"||path==="/api/quick-edit") ? noteProblem(p) : null;
+  if(np) return {status:400, body:{error:np}};
+
   if(path==="/api/quick-add"){
     const existing = lines.filter(l=>l.trim().startsWith(prefix));
     if(existing.length>=cap && !p.replace_oldest)
       return {status:409, body:{full:true, cap:cap, kind:p.kind,
         oldest: existing[0].trim().slice(prefix.length).trim()}};
-    if(existing.length>=cap) lines.splice(lines.indexOf(existing[0]),1);
+    if(existing.length>=cap){
+      const first=lines.findIndex(l=>l.trim().startsWith(prefix));
+      lines.splice(first,itemEnd(lines,first)-first);       // and its note
+    }
     const line = `${prefix} ${p.line}`;
+    const item = [line].concat(noteLines(p.note));
     // sit it with its own kind, else before the @pref trailer -- same rule
     // the server uses, so a file exported from either looks the same
     let at=-1;
     lines.forEach((l,i)=>{ if(l.trim().startsWith(prefix)) at=i; });
     if(at<0){
       let pref=-1; lines.forEach((l,i)=>{ if(l.trim().startsWith("@pref")&&pref<0) pref=i; });
-      if(pref<0) lines.push(line); else lines.splice(pref,0,line,"");
-    } else lines.splice(at+1,0,line);
+      if(pref<0) lines.push(...item); else lines.splice(pref,0,...item,"");
+    } else lines.splice(itemEnd(lines,at),0,...item);   // after its note, not inside
     if(!localSave(lines.join("\n"))) return {status:500,body:{error:"Could not save."}};
     return {status:200, body:{ok:true, added:line, count:countOf(prefix), cap:cap}};
   }
@@ -3766,9 +3870,10 @@ function localApi(path,p){
     const target = want(p.line.trim(), prefix).trim();
     const i = lines.findIndex(l=>l.trim()===target);
     if(i<0) return {status:404, body:{error:"Couldn't find that one; it may already be gone."}};
-    lines.splice(i,1);
+    const note = noteTextAt(lines,i);
+    lines.splice(i,itemEnd(lines,i)-i);
     if(!localSave(lines.join("\n"))) return {status:500,body:{error:"Could not save."}};
-    return {status:200, body:{ok:true, removed:target}};
+    return {status:200, body:{ok:true, removed:target, note:note}};
   }
 
   if(path==="/api/quick-done"){
@@ -3787,16 +3892,21 @@ function localApi(path,p){
     const target = want(p.line.trim(), prefix).trim();
     const i = lines.findIndex(l=>l.trim()===target);
     if(i<0) return {status:404, body:{error:"Couldn't find that one; reload and try again."}};
-    lines[i]=want(p.newline.trim(), prefix);
+    if(/[\r\n]/.test(p.newline)) return {status:400, body:{error:"One line at a time."}};
+    const repl = want(p.newline.trim(), prefix);
+    // no note key = leave the note alone, exactly like the server
+    if(p.note!=null) lines.splice(i,itemEnd(lines,i)-i,repl,...noteLines(p.note));
+    else lines[i]=repl;
     if(!localSave(lines.join("\n"))) return {status:500,body:{error:"Could not save."}};
     return {status:200, body:{ok:true, line:lines[i]}};
   }
   return {status:400, body:{error:"Unknown operation."}};
 }
 
-async function postQuick(line,replaceOldest){
+async function postQuick(line,replaceOldest,note){
   return api("/api/quick-add",
-             {kind:QCTX.kind, line:line, replace_oldest:!!replaceOldest});
+             {kind:QCTX.kind, line:line, replace_oldest:!!replaceOldest,
+              note:note==null?"":note});
 }
 async function reloadMine(){
   if(LOCAL){
@@ -3836,7 +3946,8 @@ document.getElementById("qSave").onclick=async()=>{
     if(!line){document.getElementById("qMsg").textContent=
       "Give it a name, and a date or at least one day.";return;}
     const {body}=await api("/api/quick-edit",
-      {kind:QCTX.kind, line:QCTX.src, newline:line});
+      {kind:QCTX.kind, line:QCTX.src, newline:line,
+       note:document.getElementById("qNote").value});
     if(!body.ok){document.getElementById("qMsg").textContent=body.error||"Couldn't save that.";return;}
     qDlg.close(); await reloadMine(); setStatus("Saved.");
     return;
@@ -3844,7 +3955,8 @@ document.getElementById("qSave").onclick=async()=>{
   const line=quickLine();
   if(!line){document.getElementById("qMsg").textContent=
     "Give it a name, and a date or at least one day.";return;}
-  const {status,body}=await postQuick(line,false);
+  const note=document.getElementById("qNote").value;
+  const {status,body}=await postQuick(line,false,note);
   if(status===409&&body.full){                 // at the cap: offer to drop #1
     qDlg.close();
     /* The numbers come from the server's reply, not from a copy in here --
@@ -3855,6 +3967,7 @@ document.getElementById("qSave").onclick=async()=>{
     document.getElementById("fullTitle").textContent=`That's ${body.cap} already`;
     document.getElementById("fullOldest").textContent=body.oldest;
     fullDlg.dataset.line=line;
+    fullDlg.dataset.note=note;
     fullDlg.showModal();
     return;
   }
@@ -3864,7 +3977,7 @@ document.getElementById("qSave").onclick=async()=>{
 };
 document.getElementById("fullCancel").onclick=()=>fullDlg.close();
 document.getElementById("fullGo").onclick=async()=>{
-  const {body}=await postQuick(fullDlg.dataset.line,true);
+  const {body}=await postQuick(fullDlg.dataset.line,true,fullDlg.dataset.note||"");
   fullDlg.close();
   if(body.ok){await reloadMine();setStatus(`Replaced the oldest. ${body.count}/${body.cap} used.`);}
   else setStatus(body.error||"Couldn't add that.");
@@ -3877,7 +3990,7 @@ document.getElementById("fullGo").onclick=async()=>{
    and the line is right here in hand, so putting it back is one request. */
 let UNDO_TIMER=null;
 function hideUndo(){const el=document.getElementById("undo");if(el)el.style.display="none";}
-function offerUndo(msg,kind,line){
+function offerUndo(msg,kind,line,note){
   const el=document.getElementById("undo");
   clearTimeout(UNDO_TIMER);
   el.innerHTML="";
@@ -3885,7 +3998,7 @@ function offerUndo(msg,kind,line){
   const b=document.createElement("button");b.textContent="Undo";
   b.onclick=async()=>{
     hideUndo();
-    const {body}=await api("/api/quick-add",{kind:kind,line:line});
+    const {body}=await api("/api/quick-add",{kind:kind,line:line,note:note||""});
     if(body.ok){await reloadMine();setStatus("Put back.");}
     else setStatus(body.error||"Couldn't put that back \u2014 add it again by hand.");
   };
@@ -3896,7 +4009,7 @@ function offerUndo(msg,kind,line){
 async function quickDelete(kind,src,label){
   if(!confirm(`Delete "${label}"?`))return;
   const {body}=await api("/api/quick-delete",{kind:kind,line:src});
-  if(body.ok){await reloadMine();offerUndo(`Deleted \u201c${label}\u201d.`,kind,src);}
+  if(body.ok){await reloadMine();offerUndo(`Deleted \u201c${label}\u201d.`,kind,src,body.note);}
   else setStatus(body.error||"Couldn't delete that.");
 }
 /* A milestone needs two things doing to it -- ticking off and deleting -- and
@@ -3926,6 +4039,8 @@ function openItemMenu(el,ev){
     : (el.dataset.name||(el.querySelector(".bname")||{}).textContent||"this");
   const m=document.createElement("div");m.className="hwmenu";
   m.innerHTML=`<div class="ttl">${esc(name)}</div>`;
+  const note=noteFor(kind,src);
+  if(note){const nd=document.createElement("div");nd.className="mnote";nd.textContent=note;m.appendChild(nd);}
   if(hw){
     const b1=document.createElement("button");
     b1.textContent=done?"\u21ba Mark not done":"\u2713 Mark done";
