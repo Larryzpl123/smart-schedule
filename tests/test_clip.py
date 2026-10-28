@@ -53,7 +53,8 @@ MEASURE = """() => {
   document.querySelectorAll('#gbody .block:not(.dayfull)').forEach(blk => {
     const cs = getComputedStyle(blk);
     const padT = parseFloat(cs.paddingTop), padB = parseFloat(cs.paddingBottom);
-    const avail = blk.clientHeight - padT - padB;
+    // data-push: the top of this block that an earlier short block is drawn over
+    const avail = blk.clientHeight - padT - padB - (+blk.dataset.push || 0);
     const kids = Array.from(blk.children).filter(e => !e.classList.contains('bextra'));
     if (!kids.length) return;
     const base = kids[0].offsetTop;
@@ -66,6 +67,19 @@ MEASURE = """() => {
                 overflowPx: nm.scrollHeight - nm.clientHeight});
     kids.forEach(el => {
       if (el.classList.contains('hid')) return;          // hidden = fine
+      // Every line still shown must be ON TOP where it is drawn -- not under
+      // another block. A short block is stretched into the next one; this is
+      // what catches either of the two being painted over the other's text.
+      const er = el.getBoundingClientRect();
+      const cx = er.left + er.width / 2, cy = er.top + er.height / 2;
+      if (er.height > 0 && cy > 0 && cy < innerHeight && cx > 0 && cx < innerWidth) {
+        const top = document.elementsFromPoint(cx, cy)
+          .map(e => e.closest('.block:not(.dayfull)')).find(Boolean);
+        if (top && top !== blk) out.push({
+          block: blk.querySelector('.bname').textContent.slice(0, 24),
+          line: el.className + ' (covered by ' + top.querySelector('.bname').textContent.slice(0, 20) + ')',
+          overflowPx: 0 });
+      }
       const over = (el.offsetTop + el.offsetHeight) - (base + avail);
       // 1.5px matches the renderer's sub-pixel grace: that much runs into the
       // padding and is invisible. A genuinely half-cut line overflows by ~6px+.
@@ -186,10 +200,14 @@ try:
 
         # ---- a 10-minute slot with something starting right after it ----
         # Oct 30: "Student Meeting" 10:05-10:15, then the Immersives Fair at
-        # 10:15. A block is never drawn under MIN_BLOCK_PX (22px), so the 10px
-        # meeting reached 11px into the Fair -- whose times do not overlap, so
-        # layoutOverlaps() put both full width and the Fair was painted over
-        # the meeting's name, cutting it in half.
+        # 10:15. History of this one:
+        #  - patch 43: stretched to 22px and judged overlapping by that height
+        #    -> the two were squeezed side by side, though their times do not clash;
+        #  - patch 44 draft: true 10.5px height and a 9px ".micro" line -> exact
+        #    but too small to read on a plain monitor;
+        #  - now: normal 22px, full width, drawn ON TOP of the Fair, whose own
+        #    text is pushed down below it. Both names readable (MEASURE checks
+        #    that nothing shown is covered), times only off by the stretch.
         pg.set_viewport_size({"width": 1280, "height": 900})
         pg.goto(BASE + "/edit")
         pg.click("#modeText")
@@ -199,51 +217,58 @@ try:
             "@event 2026-09-08 - Lone ten - 17:00-17:10 - gray\n"
             "@event 2026-09-08 - Gap ten - 17:30-17:40 - gray\n"
             "@event 2026-09-08 - After gap - 17:45-18:00 - gray\n"
-            "@event 2026-09-08 - Clash one - 19:00-20:00 - gray\n"
-            "@event 2026-09-08 - Clash two - 19:30-20:30 - gray\n@pref"))
+            "@event 2026-09-08 - Chain one - 18:10-18:20 - gray\n"
+            "@event 2026-09-08 - Chain two - 18:20-18:30 - gray\n"
+            "@event 2026-09-08 - Chain three - 18:30-19:00 - gray\n"
+            "@event 2026-09-08 - Clash one - 19:30-20:30 - gray\n"
+            "@event 2026-09-08 - Clash two - 20:00-21:00 - gray\n@pref"))
         pg.click('button[type=submit]')
         pg.wait_for_load_state()
         pg.goto(BASE + "/app")
         pg.wait_for_selector("#gbody .col", timeout=8000)
         pg.wait_for_timeout(300)
-        bad4 = pg.evaluate(MEASURE)
-        ck(not bad4, f"no line half-cut on a day with 10-minute blocks ({bad4[:3]})")
-        solo4 = pg.evaluate(SOLO)
-        ck(not solo4, f"back-to-back blocks are NOT put side by side ({solo4[:3]})")
-        g = pg.evaluate("""() => {
+        NAMES = {"Fair right after": "fair", "Lone ten": "lone", "Gap ten": "gap",
+                 "After gap": "after", "Chain one": "ch1", "Chain two": "ch2",
+                 "Chain three": "ch3", "Clash one": "c1", "Clash two": "c2"}
+        GEOM = """names => {
           const out = {};
           document.querySelectorAll('#gbody .block:not(.dayfull)').forEach(b => {
             const n = b.querySelector('.bname'), t = n ? n.textContent : '';
-            const k = t.startsWith('Student Meeting') ? 'meet' : t === 'Fair right after' ? 'fair'
-                    : t === 'Lone ten' ? 'lone' : t === 'Gap ten' ? 'gap' : t === 'After gap' ? 'after'
-                    : t === 'Clash one' ? 'c1' : t === 'Clash two' ? 'c2' : null;
+            const k = t.startsWith('Student Meeting') ? 'meet' : names[t];
             if (!k) return;
             const r = b.getBoundingClientRect(), nr = n.getBoundingClientRect(),
                   col = b.closest('.col').getBoundingClientRect();
-            out[k] = {l: r.left, r: r.right, t: r.top, b: r.bottom,
-                      nameInside: nr.top >= r.top - 0.5 && nr.bottom <= r.bottom + 0.5,
-                      h: r.height, micro: b.classList.contains('micro'),
+            out[k] = {t: r.top, b: r.bottom, h: r.height, nt: nr.top, nb: nr.bottom,
                       share: Math.round(r.width / col.width * 100)};
           });
-          return out; }""")
+          return out; }"""
+        bad4, g, sc = [], {}, 0
+        # the evening slots are below the fold: measure, scroll, measure again
+        for sc in (0, 500, 1000):
+            pg.evaluate(f"window.scrollTo(0, {sc})")
+            pg.wait_for_timeout(150)
+            bad4 += pg.evaluate(MEASURE)
+        pg.evaluate("window.scrollTo(0, 0)")
+        g = pg.evaluate(GEOM, NAMES)
+        ck(not bad4, f"nothing half-cut or covered on a day with 10-minute blocks ({bad4[:3]})")
+        solo4 = pg.evaluate(SOLO)
+        ck(not solo4, f"back-to-back blocks are NOT put side by side ({solo4[:3]})")
         m, f, lone = g.get("meet"), g.get("fair"), g.get("lone")
-        hit = (m and f and m["l"] < f["r"] and f["l"] < m["r"]
-               and m["t"] < f["b"] and f["t"] < m["b"])
-        ck(m and f and not hit,
-           f"the 10-minute block and the one starting right after it are not "
-           f"drawn on top of each other ({m}, {f})")
-        ck(m and m["nameInside"], f"its name sits wholly inside its own box ({m})")
-        ck(lone and lone["share"] > 80,
-           f"a 10-minute block with nothing after it keeps the full width ({lone})")
-        ck(m and f and m["share"] > 80 and f["share"] > 80,
-           f"the 10-minute block and the one right after it are both full width ({m and m['share']}, {f and f['share']})")
-        ck(m and m["micro"] and m["b"] <= f["t"] + 0.5,
-           f"with no room to stretch it keeps its true height and goes .micro ({m})")
-        ck(lone and not lone["micro"] and lone["h"] >= 21.5,
-           f"with empty space below, a 10-minute block is stretched to readable size ({lone})")
+        ck(m and m["h"] >= 21.5 and f and m["share"] > 80 and f["share"] > 80,
+           f"the 10-minute block is drawn at normal size, and both it and the next are full width ({m}, {f})")
+        ck(m and f and m["nb"] <= m["b"] + 0.5 and f["nt"] >= m["b"] - 0.5,
+           f"the next block's name starts below the short one, not under it ({m}, {f})")
+        ck(m and f and f["t"] < m["b"],
+           f"...while that block's own top stays at its real start time ({f and f['t']} < {m and m['b']})")
+        ck(lone and lone["h"] >= 21.5 and lone["share"] > 80,
+           f"a 10-minute block with nothing after it: normal size, full width ({lone})")
         ga, af = g.get("gap"), g.get("after")
-        ck(ga and af and ga["b"] <= af["t"] + 0.5 and ga["h"] > 11 and af["share"] > 80,
-           f"a 5-minute gap: stretched only as far as the next block, never into it ({ga}, {af})")
+        ck(ga and af and ga["h"] >= 21.5 and af["nt"] >= ga["b"] - 0.5,
+           f"a 5-minute gap: the stretch runs past it, and the next name still clears it ({ga}, {af})")
+        c1_, c2_, c3_ = g.get("ch1"), g.get("ch2"), g.get("ch3")
+        ck(c1_ and c2_ and c3_ and c2_["nt"] >= c1_["b"] - 0.5 and c3_["nt"] >= c2_["b"] - 0.5
+           and c2_["nb"] <= c2_["b"] + 0.5,
+           f"a chain of short slots stacks down, every name visible ({c1_}, {c2_}, {c3_})")
         c1, c2 = g.get("c1"), g.get("c2")
         ck(c1 and c2 and c1["share"] < 60 and c2["share"] < 60,
            f"blocks whose times really clash are still side by side ({c1 and c1['share']}, {c2 and c2['share']})")

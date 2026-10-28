@@ -254,10 +254,6 @@
   /* A 25-minute block is ~26px tall; the normal .35rem padding eats half of
      that and clips even one line of text. Short blocks get thin padding. */
   .block.tight{padding:.15rem .45rem}
-  /* Too short to stretch (see MIN_BLOCK_PX): one small line, name only.
-     Hover / tap give it the normal look back, via the usual min-height. */
-  .block.micro:not(:hover):not(.open){padding:0 .4rem}
-  .block.micro:not(:hover):not(.open) .bname{font-size:9px!important;line-height:1!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .block.tight .bname{font-size:.68rem}
   .block:not(.dayfull):hover.tight{padding:.35rem .45rem}
   .block .hid{display:none}
@@ -268,7 +264,7 @@
      fought; and being a block at all meant a double-click hit it instead of
      opening the add-event box. */
   .block.dayfull{cursor:pointer;z-index:0}
-  .block:not(.dayfull){z-index:1}
+  .block:not(.dayfull){z-index:var(--z,1)}   /* --z: see layoutOverlaps() */
   .block.now{box-shadow:0 0 0 2px var(--accent),0 4px 14px var(--shadow);z-index:6}
   .block .bname{font-weight:700;font-size:.72rem;overflow-wrap:break-word}
   /* A block sharing its column with three or four others is only ~50px wide,
@@ -1727,13 +1723,15 @@ function projStat(pr){
 const AX_DEF_START=8*60, AX_DEF_END=18*60, AX_FLOOR=6*60, AX_CEIL=23*60;
 let AX_START=AX_DEF_START, AX_END=AX_DEF_END;
 const PX_PER_MIN=1.05;
-/* A short block is stretched to this height so a 10-minute slot is not a
-   10px sliver -- but only into EMPTY space. Overlap is decided by real times
-   (patch 43 decided it by the stretched height instead, and so put two
-   back-to-back slots, 10:05-10:15 and 10:15-10:50, side by side as if they
-   clashed). When the next block starts too soon to stretch, the block keeps
-   its true height and gets .micro: one small line, the rest on hover/tap.
-   All of it is decided in layoutOverlaps() from the times, not measured. */
+/* A short block is always drawn at least this tall: a 10-minute slot at its
+   true 10.5px is a sliver nobody can read (tried in patch 44 as ".micro", a
+   9px line -- legible on a retina phone, not on a plain monitor). Readability
+   wins over exactness, so it reaches into whatever starts right after it.
+   What that costs is handled in layoutOverlaps():
+   - lanes are still decided by REAL times, so back-to-back slots stay full
+     width instead of being squeezed side by side (patch 43's mistake);
+   - the short block is drawn ON TOP of the one it reaches into, and that
+     one's text is pushed down below it, so both names stay readable. */
 const MIN_BLOCK_PX=22;
 let BODY_H=(AX_END-AX_START)*PX_PER_MIN;
 function setAxis(startMin,endMin){
@@ -2403,18 +2401,34 @@ function layoutOverlaps(){
       .map(el=>({el,start:+el.dataset.start,end:+el.dataset.end}))
       .filter(b=>Number.isFinite(b.start)&&Number.isFinite(b.end))
       .sort((a,b)=>a.start-b.start||a.end-b.end);
-    /* Height: true length, stretched toward MIN_BLOCK_PX but never past the
-       start of the next block that begins after this one ends. Anything that
-       starts before it ends overlaps it and sits in another lane, so it is
-       not in the way. */
-    blocks.forEach(b=>{
-      const dur=(b.end-b.start)*PX_PER_MIN;
-      let room=Infinity;
-      blocks.forEach(c=>{if(c!==b&&c.start>=b.end)room=Math.min(room,(c.start-b.start)*PX_PER_MIN);});
-      const h=Math.max(dur,Math.min(MIN_BLOCK_PX,room));
+    /* In start order, so a block knows what the earlier ones drew:
+       push   how far an earlier, stretched block reaches down into this one
+              (only blocks that END before this starts -- anything still
+              running is a real clash and sits in another lane instead);
+       height true length, but at least push + MIN_BLOCK_PX, so a block that
+              is itself covered at the top still has a readable line below;
+       dend   where it is drawn to, in minutes, for the blocks after it. */
+    blocks.forEach((b,i)=>{
+      let push=0;
+      for(let j=0;j<i;j++){const a=blocks[j];
+        if(a.end<=b.start&&a.dend>b.start)push=Math.max(push,(a.dend-b.start)*PX_PER_MIN);}
+      const h=Math.max((b.end-b.start)*PX_PER_MIN, push>0?push+MIN_BLOCK_PX:MIN_BLOCK_PX);
+      b.push=push; b.dend=b.start+h/PX_PER_MIN;
       b.el.style.height=h+"px";
-      b.el.classList.toggle("micro",h<MIN_BLOCK_PX);
+      b.el.dataset.push=push?String(push):"";
+      const first=b.el.firstElementChild;
+      if(first)first.style.marginTop=push?push+"px":"";
     });
+    /* Stacking: a block sits above every block it reaches into, which is
+       1 + theirs (back to front, so a chain of short slots -- Convocation's
+       08:15, 08:25, 08:35 -- stacks the right way round). Through --z, so
+       hover / now / open, which set z-index in the stylesheet with higher
+       specificity, still lift a block above all of this. */
+    for(let i=blocks.length-1;i>=0;i--){const a=blocks[i];let z=1;
+      for(let j=i+1;j<blocks.length;j++){const b=blocks[j];
+        if(a.end<=b.start&&a.dend>b.start)z=Math.max(z,b.z+1);}
+      a.z=z; a.el.style.setProperty("--z",z>1?String(z):"");
+    }
     blocks_clear(col);
     let run=[], lanes=[], sized=[];
     const flush=()=>{
@@ -2470,7 +2484,9 @@ function clipBlocks(){
     if(!kids.length)return;
     kids.forEach(el=>el.classList.remove("hid"));
     // decided before measuring: it changes the padding, hence the space available
-    blk.classList.toggle("tight", blk.getBoundingClientRect().height < 34);
+    // ...from the part that is actually visible: the top data-push px are
+    // under the short block drawn over it
+    blk.classList.toggle("tight", blk.getBoundingClientRect().height-(+blk.dataset.push||0) < 34);
     const nameEl=kids[0];
     nameEl.style.webkitLineClamp=""; nameEl.style.display=""; nameEl.style.webkitBoxOrient="";
     nameEl.style.overflow="";
@@ -2479,7 +2495,9 @@ function clipBlocks(){
        the padding, which is inside the clipping box anyway), and dropping a
        whole line of text over 0.3px of rounding is the worse outcome. */
     const GRACE=1.5;
-    const avail=blk.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom)+GRACE;
+    // minus the top that an earlier short block is drawn over (data-push)
+    const avail=blk.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom)+GRACE
+               -(+blk.dataset.push||0);
     const base=kids[0].offsetTop;
     // The name always stays -- an empty coloured rectangle is worse than a
     // shortened title -- but it gets clamped to the number of lines that fit.
