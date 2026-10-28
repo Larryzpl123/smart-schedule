@@ -59,6 +59,12 @@ _cwd = os.getcwd(); os.chdir(APP_DIR)
 import app as A
 os.chdir(_cwd)
 base = open(os.path.join(APP_DIR, "schedule.txt"), encoding="utf-8").read()
+# Build on the shared file WITHOUT whatever dated one-offs it happens to carry.
+# The first version of this test trusted it to have none; the day the real
+# Pep Rally block got appended to schedule.txt, "nothing set" stopped meaning
+# nothing set and this test went red for a reason that was not a bug.
+base = "\n".join(l for l in base.splitlines()
+                  if not l.strip().startswith("@retime")) + "\n"
 
 e, w = A.check_shared(base)
 ck(not e, f"the current shared file still passes ({e})")

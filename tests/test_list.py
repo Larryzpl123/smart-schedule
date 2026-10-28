@@ -306,6 +306,7 @@ try:
             from zoneinfo import ZoneInfo as _Z
             ny = _Z("America/New_York")
             local = {}
+            wday = {}                      # (hour, minute) -> is it a Wednesday
             for blk in t.split("BEGIN:VEVENT")[1:]:
                 if "SUMMARY:AP Calculus BC" not in blk:
                     continue
@@ -314,7 +315,7 @@ try:
                         v = l[len("DTSTART:"):]
                         u = _dt.strptime(v, "%Y%m%dT%H%M%SZ").replace(tzinfo=_tz.utc)
                         n = u.astimezone(ny)
-                        local.setdefault(v[:6], []).append((n.hour, n.minute))
+                        local.setdefault(v[:6], []).append((n.hour, n.minute, n.weekday() == 2))
             months = sorted(local)
             edt = [m for m in months if m in ("202609", "202610")]
             est = [m for m in months if m in ("202612", "202701")]
@@ -327,12 +328,30 @@ try:
             # same set. A fixed offset would shift one of them by an hour.
             warm = set().union(*[set(local[m]) for m in edt])
             cold = set().union(*[set(local[m]) for m in est])
-            # (Winter has fewer school days than autumn, so the cold set can
-            # be smaller -- but with a fixed offset it would be DISJOINT,
-            # every time shifted by exactly an hour.)
-            ck(cold and cold <= warm and len(cold) > 1,
-               f"and it reads back at the same wall-clock times on both sides "
-               f"of it ({sorted(warm)} vs {sorted(cold)})")
+            # The first version asked for cold <= warm: every start time seen in
+            # winter must also have been seen in autumn. That holds only by the
+            # luck of the rotation -- which Wednesdays period A happens to land
+            # on -- and one no-class day in October (10/28) shifted the
+            # rotation and broke it without anything being wrong.
+            # What DST actually threatens is a time an hour off. So: every
+            # exported start, on both sides of the change, must be a real start
+            # time for ITS kind of day, read from the bell schedule itself.
+            import re as _re
+            sched = open(os.path.join(APP_DIR, "schedule.txt"), encoding="utf-8").read()
+            hm = lambda x: tuple(int(y) for y in x.split(":"))
+            normal_ok, wed_ok = set(), set()
+            for line in sched.splitlines():
+                if line.startswith("@day"):
+                    for tok in line.split("=", 1)[1].split():
+                        for tr in tok.split(":", 1)[1].split("|"):
+                            normal_ok.add(hm(tr.split("-")[0]))
+                elif line.startswith("@wed"):
+                    wed_ok.add(hm(line.split("=>")[1].strip().split("-")[0]))
+            bad = sorted((h, m, "Wed" if w else "") for (h, m, w) in warm | cold
+                         if (h, m) not in (wed_ok if w else normal_ok))
+            ck(len(warm) > 1 and len(cold) > 1 and not bad,
+               f"and it reads back at real bell times on both sides of it "
+               f"(off the bell schedule: {bad})")
         except ImportError:
             print("  SKIP  zoneinfo not available for the DST check")
 
