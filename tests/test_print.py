@@ -69,6 +69,7 @@ HOOK = """() => { window.__snaps = []; window.print = () => {
     toolbar: getComputedStyle(document.querySelector('.toolbar')).display,
     imgs: t.querySelectorAll('img').length,
     zoom: parseFloat(m.style.zoom || '1'), h: m.getBoundingClientRect().height,
+    gw: document.querySelector('.grid-wrap').getBoundingClientRect().width,
     blocks: Array.from(document.querySelectorAll('#gbody .block .bname')).map(b => b.textContent)
   }); }; }"""
 
@@ -108,26 +109,41 @@ try:
         def run(what, layout, notes=True):
             pg.click("#printBtn")
             pg.wait_for_timeout(150)
-            pg.check(f"input[name=prWhat][value={what}]")
-            pg.check(f"input[name=prLayout][value={layout}]")
+            pg.click(f"#prCards button[data-what={what}][data-layout={layout}]")
             if pg.is_visible("#prNotes"):
                 pg.set_checked("#prNotes", notes)
             pg.click("#printGo")
             pg.wait_for_timeout(900)
             return pg.evaluate("window.__snaps[window.__snaps.length-1]")
 
-        # ---------------- the dialog ----------------
+        # ---------------- the button and the dialog ----------------
+        ic = pg.evaluate("""() => { const b = document.getElementById('printBtn');
+            return {svg: !!b.querySelector('svg'), label: b.getAttribute('aria-label'), w: b.getBoundingClientRect().width}; }""")
+        ck(ic["svg"] and ic["label"] and ic["w"] > 10, f"the button is a printer icon with an accessible name ({ic})")
         pg.click("#printBtn")
-        pg.wait_for_timeout(150)
+        pg.wait_for_timeout(200)
         wk = pg.text_content("#printWeek")
         ck("Oct 26" in wk and "Oct 30" in wk, f"the dialog says which week it prints ({wk!r})")
-        pg.check("input[name=prWhat][value=school]")
-        ck(not pg.is_visible("#prNotes"), "no notes option for School only (nothing personal to note)")
-        pg.check("input[name=prWhat][value=mine]")
-        pg.check("input[name=prLayout][value=grid]")
+        cards = pg.evaluate("""() => Array.from(document.querySelectorAll('#prCards button')).map(b =>
+            ({w: b.dataset.what, l: b.dataset.layout, on: b.classList.contains('on'),
+              rects: b.querySelectorAll('svg rect').length, cap: b.textContent}))""")
+        ck(len(cards) == 4 and {(c["w"], c["l"]) for c in cards} ==
+           {("mine", "grid"), ("mine", "table"), ("school", "grid"), ("school", "table")},
+           f"four picture cards, one per combination ({[(c['w'], c['l']) for c in cards]})")
+        on = [c for c in cards if c["on"]]
+        ck(len(on) == 1 and on[0]["w"] == "mine" and on[0]["l"] == "grid",
+           f"the default is My week as a grid ({on})")
+        cm = {(c["w"], c["l"]): c["rects"] for c in cards}
+        ck(cm[("mine", "grid")] > cm[("school", "grid")] + 10,
+           f"the pictures are of this week: mine has far more on it than the school's ({cm})")
+        dlg_text = pg.text_content("#printDlg")
+        ck(len(dlg_text) < 220, f"and not a wall of text ({len(dlg_text)} chars)")
         ck(not pg.is_visible("#prNotes"), "no notes option for the grid")
-        pg.check("input[name=prLayout][value=table]")
+        pg.click("#prCards button[data-what=school][data-layout=table]")
+        ck(not pg.is_visible("#prNotes"), "none for School only (nothing personal to note)")
+        pg.click("#prCards button[data-what=mine][data-layout=table]")
         ck(pg.is_visible("#prNotes"), "notes option for My week as a table")
+        ck(pg.evaluate("document.querySelectorAll('#prCards button.on').length") == 1, "exactly one card selected")
         pg.click("#printCancel")
 
         # ---------------- My week, table ----------------
@@ -173,6 +189,7 @@ try:
         ck(s["dcells"] == 5 and s["cols"] == 5,
            f"a phone still prints the whole week, not its one-day view ({s['dcells']} days)")
         ck(s["h"] * s["zoom"] <= 740, f"scaled to one page ({s['h']:.0f}px x {s['zoom']})")
+        ck(s["gw"] >= 960, f"...and still the full page WIDTH, no blank strip on the right ({s['gw']:.0f}px of 979)")
         ck(s["zoom"] < 1, f"...which with a 9:30pm event means scaled down ({s['zoom']})")
         ck("Game Design" in s["blocks"] and "Dentist" in s["blocks"], "with the classes and events")
         s = run("school", "grid")
@@ -250,8 +267,7 @@ try:
         lp.evaluate(HOOK)
         lp.click("#printBtn")
         lp.wait_for_timeout(150)
-        lp.check("input[name=prWhat][value=mine]")
-        lp.check("input[name=prLayout][value=table]")
+        lp.click("#prCards button[data-what=mine][data-layout=table]")
         lp.click("#printGo")
         lp.wait_for_timeout(900)
         ls = lp.evaluate("window.__snaps[window.__snaps.length-1]")

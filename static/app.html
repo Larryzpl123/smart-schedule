@@ -430,6 +430,14 @@
   #printTable .psub{font-size:calc(var(--ps,1)*10px);color:#333;overflow-wrap:anywhere}
   #printTable .pnote{font-size:calc(var(--ps,1)*10px);font-style:italic;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:1px}
   #printTable .pit.done .pnm{text-decoration:line-through;color:#555}
+  /* the four choices, as pictures of this very week */
+  #prCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
+  #prCards button{display:block;width:100%;margin:0;padding:.4rem .4rem .35rem;background:var(--panel2);
+    border:2px solid var(--line);border-radius:10px;text-align:center;color:var(--ink)}
+  #prCards button.on{border-color:var(--accent)}
+  #prCards svg{display:block;width:100%;height:auto;border-radius:4px}
+  #prCards .cap{font-size:.74rem;margin-top:.3rem;font-weight:600}
+  #printDlg{width:min(34rem,94vw)}
   @page{size:letter landscape;margin:.4in}
   @media print{
     html,body{background:#fff!important}
@@ -460,8 +468,8 @@
   <button id="icsBtn" title="Download this year as a calendar file (.ics)"
           style="width:auto;margin:0;padding:.45rem .6rem;font-size:.95rem;line-height:1"
           aria-label="Download .ics">⤓</button>
-  <button id="printBtn" title="Print this week (for a wall, a desk, a fridge)"
-          style="width:auto;margin:0;padding:.45rem .6rem;font-size:.78rem;line-height:1">Print</button>
+  <button id="printBtn" title="Print this week" aria-label="Print this week"
+          style="width:auto;margin:0;padding:.45rem .6rem;line-height:0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><rect x="2" y="9" width="20" height="9" rx="2"/><path d="M6 14h12v7H6z"/><circle cx="18" cy="12.5" r=".6" fill="currentColor" stroke="none"/></svg></button>
   <button id="themeBtn" title="Light / dark" aria-label="Switch theme"
           style="width:auto;margin:0;padding:.45rem .6rem;font-size:.95rem;line-height:1">☾</button>
   <div class="seg" id="viewSeg" title="A week hour by hour, a month at a glance, or a list of what is coming">
@@ -735,29 +743,13 @@
 </dialog>
 
 <dialog id="printDlg">
-  <h3>Print this week</h3>
-  <div id="printWeek" style="font-size:.76rem;color:var(--ink-dim);margin-bottom:.6rem;line-height:1.5"></div>
-  <div class="row" style="align-items:flex-start"><label>What</label>
-    <span style="flex:1;display:flex;flex-direction:column;gap:.3rem;font-size:.78rem">
-      <label style="display:flex;gap:.35rem;align-items:flex-start;cursor:pointer"><input type="radio" name="prWhat" value="mine" checked style="width:auto;margin:.15rem 0 0">
-        <span><b>My week</b> &mdash; classes, events, homework, everything on screen</span></label>
-      <label style="display:flex;gap:.35rem;align-items:flex-start;cursor:pointer"><input type="radio" name="prWhat" value="school" style="width:auto;margin:.15rem 0 0">
-        <span><b>School only</b> &mdash; cycle days, special schedules, assembly and school-wide events; nobody&rsquo;s classes</span></label>
-    </span></div>
-  <div class="row" style="align-items:flex-start"><label>Layout</label>
-    <span style="flex:1;display:flex;flex-direction:column;gap:.3rem;font-size:.78rem">
-      <label style="display:flex;gap:.35rem;align-items:flex-start;cursor:pointer"><input type="radio" name="prLayout" value="table" checked style="width:auto;margin:.15rem 0 0">
-        <span><b>Table</b> &mdash; a list per day, big type; easiest to read from across a room</span></label>
-      <label style="display:flex;gap:.35rem;align-items:flex-start;cursor:pointer"><input type="radio" name="prLayout" value="grid" style="width:auto;margin:.15rem 0 0">
-        <span><b>Grid</b> &mdash; hour by hour, like the screen</span></label>
-    </span></div>
-  <div class="row" id="prNotesRow"><label></label>
-    <label style="flex:1;display:flex;gap:.35rem;align-items:center;cursor:pointer;font-size:.78rem">
+  <h3 style="margin-bottom:.2rem">Print</h3>
+  <div id="printWeek" style="font-size:.74rem;color:var(--ink-dim);margin-bottom:.6rem"></div>
+  <div id="prCards"></div>
+  <div class="row" id="prNotesRow" style="margin-top:.5rem">
+    <label style="flex:1;display:flex;gap:.35rem;align-items:center;cursor:pointer;font-size:.78rem;min-width:auto">
       <input type="checkbox" id="prNotes" checked style="width:auto;margin:0">Include notes</label></div>
-  <div style="font-size:.7rem;color:var(--ink-dim);margin-bottom:.6rem;line-height:1.5">
-    One landscape page. Colours print as they are; in black and white the
-    table is the one that still reads well.</div>
-  <div class="row" style="justify-content:flex-end">
+  <div class="row" style="justify-content:flex-end;margin-top:.4rem">
     <button id="printCancel">Cancel</button>
     <button id="printGo" style="border-color:var(--accent);color:var(--accent)">Print</button>
   </div>
@@ -3491,8 +3483,8 @@ function buildICS(opts){
 const PRINT_KEY="ssa-print";
 function printPrefs(){
   try{const v=JSON.parse(localStorage.getItem(PRINT_KEY)||"{}");
-      return {what:v.what==="school"?"school":"mine",layout:v.layout==="grid"?"grid":"table",notes:v.notes!==false};}
-  catch(e){return {what:"mine",layout:"table",notes:true};}
+      return {what:v.what==="school"?"school":"mine",layout:v.layout==="table"?"table":"grid",notes:v.notes!==false};}
+  catch(e){return {what:"mine",layout:"grid",notes:true};}
 }
 function savePrintPrefs(o){try{localStorage.setItem(PRINT_KEY,JSON.stringify(o));}catch(e){}}
 
@@ -3622,14 +3614,24 @@ function printSetup(opts){
   t2.textContent=`Printed ${MON[now.getMonth()]} ${now.getDate()} · ${location.host}`;
   title.appendChild(t1);title.appendChild(t2);
   const main=document.querySelector("main");
-  main.style.zoom="";
+  main.style.zoom=""; main.style.width="";
   if(opts.layout==="grid"){
-    render();
-    /* One landscape Letter page: 8.5in less two .4in margins is 7.7in, 739px
-       at 96 per inch. A long day (an evening event) is scaled down to fit
-       rather than spilling a sliver onto a second sheet. */
-    const h=main.getBoundingClientRect().height;
-    if(h>735)main.style.zoom=String(Math.floor(735/h*1000)/1000);
+    /* One landscape Letter page is 979 x 739px (11 x 8.5in less .4in margins,
+       at 96 per inch). A long day -- an evening event -- is taller than that,
+       so the whole thing is scaled down by z. Scaling alone also narrowed it
+       to 979*z and left a blank strip down the right of the sheet; so it is
+       laid out 979/z wide first, and the scale brings it back to exactly the
+       page width. Width barely changes the height (only text wrapping in the
+       header and the all-day band), hence a couple of rounds at most. */
+    let z=1;
+    for(let i=0;i<4;i++){
+      main.style.width=(979/z)+"px";
+      render();
+      const h=main.getBoundingClientRect().height;
+      if(h*z<=735)break;
+      z=Math.floor(735/h*1000)/1000;
+    }
+    if(z<1)main.style.zoom=String(z);
   } else {
     buildPrintTable(days,opts);
   }
@@ -3642,6 +3644,7 @@ function printRestore(){
   PRINTING=false;
   document.documentElement.classList.remove("printing","print-grid","print-table");
   document.querySelector("main").style.zoom="";
+  document.querySelector("main").style.width="";
   document.getElementById("printTable").innerHTML="";
   document.getElementById("printTitle").innerHTML="";
   applyTheme(s.theme,false);
@@ -3654,28 +3657,95 @@ addEventListener("beforeprint",()=>{ if(!PRINT_SAVED&&STU) printSetup(printPrefs
 addEventListener("afterprint",()=>printRestore());
 
 const printDlg=document.getElementById("printDlg");
-function syncPrintDlg(){
-  const what=(document.querySelector('input[name=prWhat]:checked')||{}).value;
-  const lay=(document.querySelector('input[name=prLayout]:checked')||{}).value;
-  // notes only exist on the student's own things, and only the table has room
-  document.getElementById("prNotesRow").style.display=(what==="mine"&&lay==="table")?"":"none";
+let PR_PICK={what:"mine",layout:"grid"};
+/* A thumbnail of what that choice prints, drawn from THIS week's data --
+   the same daySpecs() / printRowsFor() the printout uses, in the light
+   palette, on white. A picture says "grid or list, mine or the school's"
+   faster than a paragraph does. */
+function printThumb(what,layout){
+  const W=200,H=150,P=6,HD=16, NS="http://www.w3.org/2000/svg";
+  const svg=document.createElementNS(NS,"svg");
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  const el=(tag,at)=>{const e=document.createElementNS(NS,tag);for(const k in at)e.setAttribute(k,at[k]);svg.appendChild(e);return e;};
+  el("rect",{x:0,y:0,width:W,height:H,fill:"#fff"});
+  const saveSTU=STU, saveMap=COLOR_MAP;
+  try{
+    if(what==="school")STU=schoolOnlyCopy(STU);
+    COLOR_MAP=COLOR_MAP_LIGHT;
+    const days=printDays(), n=days.length, cw=(W-2*P)/n;
+    el("rect",{x:P,y:4,width:W*0.45,height:4,rx:1,fill:"#222"});
+    const top=P+8, bodyTop=top+HD, bodyH=H-bodyTop-P;
+    days.forEach((d,i)=>{
+      const x=P+i*cw;
+      el("rect",{x:x,y:top,width:cw,height:H-top-P,fill:"none",stroke:"#bbb","stroke-width":.6});
+      el("rect",{x:x+cw*.2,y:top+4,width:cw*.6,height:3,rx:1,fill:"#555"});
+      const info=DAYMAP[dkey(d)];
+      if(info&&!info.school&&!(d.getDay()===0||d.getDay()===6))
+        el("rect",{x:x+2,y:bodyTop+2,width:cw-4,height:bodyH-4,rx:2,fill:"#eef0f3"});
+    });
+    if(layout==="grid"){
+      let lo=8*60, hi=15*60;
+      const specs=days.map(d=>daySpecs(d));
+      specs.forEach(sp=>sp.blocks.forEach(b=>{lo=Math.min(lo,b.start);hi=Math.max(hi,b.end);}));
+      const y=m=>bodyTop+2+(m-lo)/(hi-lo)*(bodyH-4);
+      specs.forEach((sp,i)=>{
+        const x=P+i*cw;
+        sp.blocks.forEach(b=>el("rect",{x:x+2,y:y(b.start),width:cw-4,height:Math.max(2,y(b.end)-y(b.start)-1),rx:1.5,
+          fill:b.fixed?"#e4e8ee":(b.color||"#e4e8ee"),stroke:"rgba(0,0,0,.12)","stroke-width":.4}));
+      });
+    } else {
+      days.forEach((d,i)=>{
+        const x=P+i*cw;
+        let yy=bodyTop+3;
+        printRowsFor(d,{what:what,notes:false,first:i===0,lastKey:dkey(days[n-1])}).rows.forEach(r=>{
+          if(yy>H-P-6)return;
+          el("rect",{x:x+2,y:yy,width:1.6,height:7,fill:r.color||"#999"});
+          el("rect",{x:x+5,y:yy+.5,width:(cw-9)*.55,height:2,fill:"#888"});
+          el("rect",{x:x+5,y:yy+3.6,width:(cw-9)*.85,height:2.6,fill:"#222"});
+          yy+=10;
+        });
+      });
+    }
+  } finally { STU=saveSTU; COLOR_MAP=saveMap; }
+  return svg;
 }
-document.querySelectorAll('input[name=prWhat],input[name=prLayout]').forEach(el=>el.addEventListener("change",syncPrintDlg));
+function drawPrintCards(){
+  const box=document.getElementById("prCards");
+  box.innerHTML="";
+  [["mine","grid","My week · Grid"],["mine","table","My week · Table"],
+   ["school","grid","School only · Grid"],["school","table","School only · Table"]].forEach(([w,l,cap])=>{
+    const bt=document.createElement("button");
+    bt.type="button"; bt.dataset.what=w; bt.dataset.layout=l;
+    bt.className=(PR_PICK.what===w&&PR_PICK.layout===l)?"on":"";
+    bt.setAttribute("aria-pressed",bt.className==="on"?"true":"false");
+    bt.appendChild(printThumb(w,l));
+    const c=document.createElement("div");c.className="cap";c.textContent=cap;bt.appendChild(c);
+    bt.onclick=()=>{PR_PICK={what:w,layout:l};
+      box.querySelectorAll("button").forEach(x=>{const on=x===bt;x.className=on?"on":"";x.setAttribute("aria-pressed",String(on));});
+      syncPrintDlg();};
+    bt.ondblclick=()=>document.getElementById("printGo").click();
+    box.appendChild(bt);
+  });
+}
+function syncPrintDlg(){
+  // notes only exist on the student's own things, and only the table has room
+  document.getElementById("prNotesRow").style.display=
+    (PR_PICK.what==="mine"&&PR_PICK.layout==="table")?"":"none";
+}
 document.getElementById("printBtn").onclick=()=>{
   if(!STU||!weekStart){setStatus("Nothing to print yet.");return;}
   const p=printPrefs();
-  document.querySelector(`input[name=prWhat][value=${p.what}]`).checked=true;
-  document.querySelector(`input[name=prLayout][value=${p.layout}]`).checked=true;
+  PR_PICK={what:p.what,layout:p.layout};
   document.getElementById("prNotes").checked=p.notes;
   document.getElementById("printWeek").textContent=
-    `Prints the week of ${weekRangeLabel(printDays())}. For a different week, close this and use ‹ › first.`;
+    `${weekRangeLabel(printDays())} · the week on screen`;
+  drawPrintCards();
   syncPrintDlg();
   printDlg.showModal();
 };
 document.getElementById("printCancel").onclick=()=>printDlg.close();
 document.getElementById("printGo").onclick=()=>{
-  const o={what:document.querySelector('input[name=prWhat]:checked').value,
-           layout:document.querySelector('input[name=prLayout]:checked').value,
+  const o={what:PR_PICK.what,layout:PR_PICK.layout,
            notes:document.getElementById("prNotes").checked};
   savePrintPrefs(o);
   printDlg.close();
