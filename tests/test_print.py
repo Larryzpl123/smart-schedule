@@ -70,6 +70,8 @@ HOOK = """() => { window.__snaps = []; window.print = () => {
     imgs: t.querySelectorAll('img').length,
     zoom: parseFloat(m.style.zoom || '1'), h: m.getBoundingClientRect().height,
     gw: document.querySelector('.grid-wrap').getBoundingClientRect().width,
+    bodyBg: getComputedStyle(document.body).backgroundColor,
+    htmlBg: getComputedStyle(document.documentElement).backgroundColor,
     blocks: Array.from(document.querySelectorAll('#gbody .block .bname')).map(b => b.textContent)
   }); }; }"""
 
@@ -106,9 +108,10 @@ try:
         pg.wait_for_timeout(400)
         pg.evaluate(HOOK)
 
-        def run(what, layout, notes=True):
+        def run(what, layout, notes=True, theme="light"):
             pg.click("#printBtn")
             pg.wait_for_timeout(150)
+            pg.click(f"#prTheme button[data-t={theme}]")
             pg.click(f"#prCards button[data-what={what}][data-layout={layout}]")
             if pg.is_visible("#prNotes"):
                 pg.set_checked("#prNotes", notes)
@@ -144,6 +147,16 @@ try:
         pg.click("#prCards button[data-what=mine][data-layout=table]")
         ck(pg.is_visible("#prNotes"), "notes option for My week as a table")
         ck(pg.evaluate("document.querySelectorAll('#prCards button.on').length") == 1, "exactly one card selected")
+        # light / dark paper, top right
+        th = pg.evaluate("""() => Array.from(document.querySelectorAll('#prTheme button')).map(b =>
+            [b.dataset.t, b.classList.contains('on')])""")
+        ck(th == [["light", True], ["dark", False]], f"a light / dark switch, light by default ({th})")
+        paper = "document.querySelector('#prCards svg rect').getAttribute('fill')"
+        ck(pg.evaluate(paper) == "#fff", "light: the pictures are on white paper")
+        pg.click("#prTheme button[data-t=dark]")
+        ck(pg.evaluate(paper) != "#fff" and pg.evaluate("document.querySelector('#prCards button.on').dataset.layout") == "table",
+           f"dark: the pictures redraw on dark paper, and the chosen card stays chosen ({pg.evaluate(paper)})")
+        pg.click("#prTheme button[data-t=light]")
         pg.click("#printCancel")
 
         # ---------------- My week, table ----------------
@@ -217,6 +230,30 @@ try:
         ck('"school"' in (st["prefs"] or "") and '"grid"' in (st["prefs"] or ""),
            f"the last choice is remembered for next time ({st['prefs']})")
 
+        # ---------------- dark paper ----------------
+        pg.evaluate("applyTheme('light', true)")      # screen in light, print in dark: proves it is the choice, not the screen
+        s = run("mine", "grid", theme="dark")
+        ck(s["theme"] == "dark" and "print-dark" in s["cls"],
+           f"Dark: printed in the dark theme ({s['theme']}, {s['cls']})")
+        ck(s["bodyBg"] == s["htmlBg"] and s["bodyBg"] not in ("rgb(255, 255, 255)", "rgba(0, 0, 0, 0)"),
+           f"...on a dark page edge to edge, no white frame ({s['bodyBg']}, {s['htmlBg']})")
+        # An @page margin is OUTSIDE the page background -- with one, a dark
+        # printout comes out framed in white. The margin has to be the body's.
+        pm = pg.evaluate("""() => { for (const sh of document.styleSheets) { let rs; try { rs = sh.cssRules; } catch (e) { continue; }
+            for (const r of rs) if (r.type === CSSRule.PAGE_RULE) return r.style.margin; } return null; }""")
+        ck(pm in ("0", "0px"), f"@page has no margin of its own (the body carries it), so dark paper has no white frame ({pm!r})")
+        s = run("mine", "table", theme="dark")
+        ck("print-dark" in s["cls"] and s["tableShown"], "the table prints dark too")
+        st = pg.evaluate("""() => ({cls: document.documentElement.className,
+            theme: document.documentElement.getAttribute('data-theme'), prefs: localStorage.getItem('ssa-print')})""")
+        ck("print-dark" not in st["cls"] and st["theme"] == "light",
+           f"afterwards the screen is back in the theme it was in (light), not the printed one ({st})")
+        ck('"dark"' in (st["prefs"] or ""), f"Dark is remembered for next time ({st['prefs']})")
+        s = run("mine", "grid", theme="light")
+        ck(s["theme"] == "light" and "print-dark" not in s["cls"] and s["bodyBg"] == "rgb(255, 255, 255)",
+           f"and Light is light again ({s['theme']}, {s['bodyBg']})")
+        pg.evaluate("applyTheme('dark', true)")
+
         # ---------------- Cmd+P: the browser's own print ----------------
         pg.evaluate("window.dispatchEvent(new Event('beforeprint'))")
         cp = pg.evaluate("document.documentElement.className")
@@ -226,13 +263,14 @@ try:
 
         # ---------------- real PDFs: one landscape page each ----------------
         pg.evaluate("VIEW='week'; render()")
-        for what in ("mine", "school"):
-            for lay in ("table", "grid"):
-                pg.evaluate("o => printSetup(o)", {"what": what, "layout": lay, "notes": True})
-                pdf = pg.pdf(prefer_css_page_size=True, print_background=True)
-                pg.evaluate("printRestore()")
-                n = pages(pdf)
-                ck(n == 1, f"{what} / {lay}: one page of PDF ({n})")
+        for th in ("light", "dark"):
+            for what in ("mine", "school"):
+                for lay in ("table", "grid"):
+                    pg.evaluate("o => printSetup(o)", {"what": what, "layout": lay, "notes": True, "theme": th})
+                    pdf = pg.pdf(prefer_css_page_size=True, print_background=True)
+                    pg.evaluate("printRestore()")
+                    n = pages(pdf)
+                    ck(n == 1, f"{th} / {what} / {lay}: one page of PDF ({n})")
         # Letter landscape: 792 x 612 pt
         pg.evaluate("o => printSetup(o)", {"what": "mine", "layout": "table", "notes": True})
         pdf = pg.pdf(prefer_css_page_size=True)

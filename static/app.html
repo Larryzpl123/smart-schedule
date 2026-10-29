@@ -405,31 +405,40 @@
      whatever does not fit), and nothing can be measured inside @media print. */
   #printTitle,#printTable{display:none}
   html.printing body>*:not(main){display:none!important}
-  html.printing body{background:#fff!important}
+  /* Paper colours. Light by default (it is what prints well); html.print-dark
+     swaps them, and then the page itself is the dark theme's background. */
+  html.printing{--pp-bg:#fff;--pp-ink:#000;--pp-rule:#000;--pp-thin:#ccc;--pp-mid:#999;
+    --pp-head:#eee;--pp-sub:#333;--pp-dim:#555}
+  html.printing.print-dark{--pp-bg:var(--bg);--pp-ink:var(--ink);--pp-rule:#6b7486;--pp-thin:#2f3646;
+    --pp-mid:#4a5263;--pp-head:var(--panel2);--pp-sub:#b7c0cf;--pp-dim:var(--ink-dim)}
+  /* Page margins live on the body, not in @page: an @page margin is outside
+     the page's own background, so a dark printout came with a white frame. */
+  html.printing,html.printing body{background:var(--pp-bg)!important}
+  html.printing body{margin:0!important;padding:.4in!important}
   html.printing main{padding:0!important;margin:0!important;width:979px;max-width:none}
   html.printing .legend,html.printing .dzoom,html.printing .nowbar{display:none!important}
   html.printing .dcell.today{outline:none!important;box-shadow:none!important}
   html.printing .block.now{box-shadow:none!important}
   html.printing .col.today,html.printing .dcell.today{background:none!important}
   html.printing #printTitle{display:flex;justify-content:space-between;align-items:baseline;
-    gap:1rem;color:#000;margin:0 0 .35rem;font-size:15px;font-weight:700}
-  html.printing #printTitle small{font-size:10px;font-weight:400;color:#555}
+    gap:1rem;color:var(--pp-ink);margin:0 0 .35rem;font-size:15px;font-weight:700}
+  html.printing #printTitle small{font-size:10px;font-weight:400;color:var(--pp-dim)}
   html.print-table .grid-wrap{display:none!important}
-  html.print-table #printTable{display:grid;gap:0;border:1.5px solid #000;color:#000;background:#fff}
-  #printTable .pcol{border-right:1px solid #000;min-width:0}
+  html.print-table #printTable{display:grid;gap:0;border:1.5px solid var(--pp-rule);color:var(--pp-ink);background:var(--pp-bg)}
+  #printTable .pcol{border-right:1px solid var(--pp-rule);min-width:0}
   #printTable .pcol:last-child{border-right:0}
-  #printTable .phead{border-bottom:1.5px solid #000;padding:5px 6px;text-align:center;background:#eee}
+  #printTable .phead{border-bottom:1.5px solid var(--pp-rule);padding:5px 6px;text-align:center;background:var(--pp-head)}
   #printTable .phead .pd{font-size:calc(var(--ps,1)*14px);font-weight:700}
   #printTable .phead .pc{font-size:calc(var(--ps,1)*11px)}
   #printTable .phead .pn{font-size:calc(var(--ps,1)*11px);font-weight:700;margin-top:1px}
   #printTable .pfull{padding:10px 6px;font-size:calc(var(--ps,1)*13px);font-weight:700;text-align:center}
-  #printTable .prot{padding:4px 6px;font-size:calc(var(--ps,1)*10px);border-bottom:1px solid #999;text-align:center}
-  #printTable .pit{padding:4px 6px 4px 8px;border-bottom:1px solid #ccc;border-left:4px solid var(--pc,#fff);break-inside:avoid}
+  #printTable .prot{padding:4px 6px;font-size:calc(var(--ps,1)*10px);border-bottom:1px solid var(--pp-mid);text-align:center}
+  #printTable .pit{padding:4px 6px 4px 8px;border-bottom:1px solid var(--pp-thin);border-left:4px solid var(--pc,var(--pp-bg));break-inside:avoid}
   #printTable .pt{font-size:calc(var(--ps,1)*10px);font-weight:700;font-variant-numeric:tabular-nums}
   #printTable .pnm{font-size:calc(var(--ps,1)*12.5px);font-weight:700;overflow-wrap:anywhere;line-height:1.2}
-  #printTable .psub{font-size:calc(var(--ps,1)*10px);color:#333;overflow-wrap:anywhere}
+  #printTable .psub{font-size:calc(var(--ps,1)*10px);color:var(--pp-sub);overflow-wrap:anywhere}
   #printTable .pnote{font-size:calc(var(--ps,1)*10px);font-style:italic;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:1px}
-  #printTable .pit.done .pnm{text-decoration:line-through;color:#555}
+  #printTable .pit.done .pnm{text-decoration:line-through;color:var(--pp-dim)}
   /* the four choices, as pictures of this very week */
   #prCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
   #prCards button{display:block;width:100%;margin:0;padding:.4rem .4rem .35rem;background:var(--panel2);
@@ -438,9 +447,10 @@
   #prCards svg{display:block;width:100%;height:auto;border-radius:4px}
   #prCards .cap{font-size:.74rem;margin-top:.3rem;font-weight:600}
   #printDlg{width:min(34rem,94vw)}
-  @page{size:letter landscape;margin:.4in}
+  /* the light / dark switch in the corner of the print dialog */
+  #prTheme button{padding:.3rem .55rem;font-size:.9rem;line-height:1}
+  @page{size:letter landscape;margin:0}
   @media print{
-    html,body{background:#fff!important}
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     dialog{display:none!important}
   }
@@ -743,8 +753,14 @@
 </dialog>
 
 <dialog id="printDlg">
-  <h3 style="margin-bottom:.2rem">Print</h3>
-  <div id="printWeek" style="font-size:.74rem;color:var(--ink-dim);margin-bottom:.6rem"></div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.8rem;margin-bottom:.6rem">
+    <div><h3 style="margin:0 0 .2rem">Print</h3>
+      <div id="printWeek" style="font-size:.74rem;color:var(--ink-dim)"></div></div>
+    <div class="seg" id="prTheme" title="Paper colour: light prints best, dark looks like the screen">
+      <button type="button" data-t="light" aria-label="Light paper">&#9728;</button>
+      <button type="button" data-t="dark" aria-label="Dark paper">&#9790;</button>
+    </div>
+  </div>
   <div id="prCards"></div>
   <div class="row" id="prNotesRow" style="margin-top:.5rem">
     <label style="flex:1;display:flex;gap:.35rem;align-items:center;cursor:pointer;font-size:.78rem;min-width:auto">
@@ -3483,8 +3499,9 @@ function buildICS(opts){
 const PRINT_KEY="ssa-print";
 function printPrefs(){
   try{const v=JSON.parse(localStorage.getItem(PRINT_KEY)||"{}");
-      return {what:v.what==="school"?"school":"mine",layout:v.layout==="table"?"table":"grid",notes:v.notes!==false};}
-  catch(e){return {what:"mine",layout:"grid",notes:true};}
+      return {what:v.what==="school"?"school":"mine",layout:v.layout==="table"?"table":"grid",
+              notes:v.notes!==false,theme:v.theme==="dark"?"dark":"light"};}
+  catch(e){return {what:"mine",layout:"grid",notes:true,theme:"light"};}
 }
 function savePrintPrefs(o){try{localStorage.setItem(PRINT_KEY,JSON.stringify(o));}catch(e){}}
 
@@ -3600,8 +3617,10 @@ function printSetup(opts){
   PRINTING=true;
   const root=document.documentElement;
   if(opts.what==="school")STU=schoolOnlyCopy(STU);
-  applyTheme("light",false);
+  const dark=opts.theme==="dark";
+  applyTheme(dark?"dark":"light",false);
   root.classList.add("printing",opts.layout==="grid"?"print-grid":"print-table");
+  if(dark)root.classList.add("print-dark");
   VIEW="week"; ZOOM=false;
   const days=printDays();
   const title=document.getElementById("printTitle");
@@ -3642,7 +3661,7 @@ function printRestore(){
   const s=PRINT_SAVED; PRINT_SAVED=null;
   STU=s.STU; VIEW=s.VIEW; ZOOM=s.ZOOM;
   PRINTING=false;
-  document.documentElement.classList.remove("printing","print-grid","print-table");
+  document.documentElement.classList.remove("printing","print-grid","print-table","print-dark");
   document.querySelector("main").style.zoom="";
   document.querySelector("main").style.width="";
   document.getElementById("printTable").innerHTML="";
@@ -3657,31 +3676,36 @@ addEventListener("beforeprint",()=>{ if(!PRINT_SAVED&&STU) printSetup(printPrefs
 addEventListener("afterprint",()=>printRestore());
 
 const printDlg=document.getElementById("printDlg");
-let PR_PICK={what:"mine",layout:"grid"};
+let PR_PICK={what:"mine",layout:"grid"}, PR_THEME="light";
 /* A thumbnail of what that choice prints, drawn from THIS week's data --
    the same daySpecs() / printRowsFor() the printout uses, in the light
    palette, on white. A picture says "grid or list, mine or the school's"
    faster than a paragraph does. */
-function printThumb(what,layout){
+function printThumb(what,layout,theme){
   const W=200,H=150,P=6,HD=16, NS="http://www.w3.org/2000/svg";
+  const dk=theme==="dark";
+  const C=dk?{paper:"#0d0f14",rule:"#3a4252",head:"#8b95a7",title:"#e7ecf3",wash:"#1c2230",
+              fixed:"#3a4252",line:"#5b6476",text:"#e7ecf3",edge:"rgba(255,255,255,.14)"}
+            :{paper:"#fff",rule:"#bbb",head:"#555",title:"#222",wash:"#eef0f3",
+              fixed:"#e4e8ee",line:"#888",text:"#222",edge:"rgba(0,0,0,.12)"};
   const svg=document.createElementNS(NS,"svg");
   svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
   const el=(tag,at)=>{const e=document.createElementNS(NS,tag);for(const k in at)e.setAttribute(k,at[k]);svg.appendChild(e);return e;};
-  el("rect",{x:0,y:0,width:W,height:H,fill:"#fff"});
+  el("rect",{x:0,y:0,width:W,height:H,fill:C.paper});
   const saveSTU=STU, saveMap=COLOR_MAP;
   try{
     if(what==="school")STU=schoolOnlyCopy(STU);
-    COLOR_MAP=COLOR_MAP_LIGHT;
+    COLOR_MAP=dk?COLOR_MAP_DARK:COLOR_MAP_LIGHT;
     const days=printDays(), n=days.length, cw=(W-2*P)/n;
-    el("rect",{x:P,y:4,width:W*0.45,height:4,rx:1,fill:"#222"});
+    el("rect",{x:P,y:4,width:W*0.45,height:4,rx:1,fill:C.title});
     const top=P+8, bodyTop=top+HD, bodyH=H-bodyTop-P;
     days.forEach((d,i)=>{
       const x=P+i*cw;
-      el("rect",{x:x,y:top,width:cw,height:H-top-P,fill:"none",stroke:"#bbb","stroke-width":.6});
-      el("rect",{x:x+cw*.2,y:top+4,width:cw*.6,height:3,rx:1,fill:"#555"});
+      el("rect",{x:x,y:top,width:cw,height:H-top-P,fill:"none",stroke:C.rule,"stroke-width":.6});
+      el("rect",{x:x+cw*.2,y:top+4,width:cw*.6,height:3,rx:1,fill:C.head});
       const info=DAYMAP[dkey(d)];
       if(info&&!info.school&&!(d.getDay()===0||d.getDay()===6))
-        el("rect",{x:x+2,y:bodyTop+2,width:cw-4,height:bodyH-4,rx:2,fill:"#eef0f3"});
+        el("rect",{x:x+2,y:bodyTop+2,width:cw-4,height:bodyH-4,rx:2,fill:C.wash});
     });
     if(layout==="grid"){
       let lo=8*60, hi=15*60;
@@ -3691,7 +3715,7 @@ function printThumb(what,layout){
       specs.forEach((sp,i)=>{
         const x=P+i*cw;
         sp.blocks.forEach(b=>el("rect",{x:x+2,y:y(b.start),width:cw-4,height:Math.max(2,y(b.end)-y(b.start)-1),rx:1.5,
-          fill:b.fixed?"#e4e8ee":(b.color||"#e4e8ee"),stroke:"rgba(0,0,0,.12)","stroke-width":.4}));
+          fill:b.fixed?C.fixed:(b.color||C.fixed),stroke:C.edge,"stroke-width":.4}));
       });
     } else {
       days.forEach((d,i)=>{
@@ -3700,8 +3724,8 @@ function printThumb(what,layout){
         printRowsFor(d,{what:what,notes:false,first:i===0,lastKey:dkey(days[n-1])}).rows.forEach(r=>{
           if(yy>H-P-6)return;
           el("rect",{x:x+2,y:yy,width:1.6,height:7,fill:r.color||"#999"});
-          el("rect",{x:x+5,y:yy+.5,width:(cw-9)*.55,height:2,fill:"#888"});
-          el("rect",{x:x+5,y:yy+3.6,width:(cw-9)*.85,height:2.6,fill:"#222"});
+          el("rect",{x:x+5,y:yy+.5,width:(cw-9)*.55,height:2,fill:C.line});
+          el("rect",{x:x+5,y:yy+3.6,width:(cw-9)*.85,height:2.6,fill:C.text});
           yy+=10;
         });
       });
@@ -3718,7 +3742,7 @@ function drawPrintCards(){
     bt.type="button"; bt.dataset.what=w; bt.dataset.layout=l;
     bt.className=(PR_PICK.what===w&&PR_PICK.layout===l)?"on":"";
     bt.setAttribute("aria-pressed",bt.className==="on"?"true":"false");
-    bt.appendChild(printThumb(w,l));
+    bt.appendChild(printThumb(w,l,PR_THEME));
     const c=document.createElement("div");c.className="cap";c.textContent=cap;bt.appendChild(c);
     bt.onclick=()=>{PR_PICK={what:w,layout:l};
       box.querySelectorAll("button").forEach(x=>{const on=x===bt;x.className=on?"on":"";x.setAttribute("aria-pressed",String(on));});
@@ -3727,6 +3751,13 @@ function drawPrintCards(){
     box.appendChild(bt);
   });
 }
+function syncPrThemeSeg(){
+  document.querySelectorAll("#prTheme button").forEach(b=>{
+    const on=b.dataset.t===PR_THEME; b.classList.toggle("on",on); b.setAttribute("aria-pressed",String(on));});
+}
+document.querySelectorAll("#prTheme button").forEach(b=>b.onclick=()=>{
+  PR_THEME=b.dataset.t; syncPrThemeSeg(); drawPrintCards();   // the pictures change colour with it
+});
 function syncPrintDlg(){
   // notes only exist on the student's own things, and only the table has room
   document.getElementById("prNotesRow").style.display=
@@ -3735,7 +3766,8 @@ function syncPrintDlg(){
 document.getElementById("printBtn").onclick=()=>{
   if(!STU||!weekStart){setStatus("Nothing to print yet.");return;}
   const p=printPrefs();
-  PR_PICK={what:p.what,layout:p.layout};
+  PR_PICK={what:p.what,layout:p.layout}; PR_THEME=p.theme;
+  syncPrThemeSeg();
   document.getElementById("prNotes").checked=p.notes;
   document.getElementById("printWeek").textContent=
     `${weekRangeLabel(printDays())} · the week on screen`;
@@ -3745,7 +3777,7 @@ document.getElementById("printBtn").onclick=()=>{
 };
 document.getElementById("printCancel").onclick=()=>printDlg.close();
 document.getElementById("printGo").onclick=()=>{
-  const o={what:PR_PICK.what,layout:PR_PICK.layout,
+  const o={what:PR_PICK.what,layout:PR_PICK.layout,theme:PR_THEME,
            notes:document.getElementById("prNotes").checked};
   savePrintPrefs(o);
   printDlg.close();
