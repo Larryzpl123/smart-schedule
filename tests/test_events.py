@@ -175,7 +175,7 @@ after = save(ok_ev)
 ck(f"E{_app.MAX_EVENTS}" in after,
    f"exactly {_app.MAX_EVENTS} events is accepted")
 ck(_app.MAX_HW == 60, f"the homework cap is 60 ({_app.MAX_HW})")
-ck(_app.MAX_EVENTS == 50, f"and events went to 50 ({_app.MAX_EVENTS})")
+ck(_app.MAX_EVENTS == 200, f"and events went to 200 ({_app.MAX_EVENTS})")
 too_many_hw = good + "\n" + "\n".join(
     f"@hw A - before - H{d} - 2026-10-{(d % 28) + 1:02d}" for d in range(1, _app.MAX_HW + 2))
 after = save(too_many_hw)
@@ -185,6 +185,29 @@ ck(f"H{_app.MAX_HW + 1}" not in after,
 over = _app.MAX_SCHEDULE_BYTES + 1000
 after = save(good + "\n" + "x" * over)
 ck(len(after) < over, f"a schedule over {_app.MAX_SCHEDULE_BYTES // 1024} KB is refused")
+
+# The caps have to be REACHABLE: someone at every count cap at once, with long
+# names and every optional field filled, must still be under the byte cap --
+# otherwise "200 events" is a promise the KB limit breaks first.
+cls = "".join(f"{L} - Advanced Placement Course {L} - CS300 - 4 - Ms. Somebody-Longname - GH 043 - orange - Ea\n"
+              for L in "ABCDEFGH")
+full = ("Jane Doe\n27 - Junior\n\n@term Fall 2026 = 08.25-01.15\n" + cls
+        + "@term Spring 2027 = 01.19-06.30\n" + cls
+        + "".join(f"@sport Cross Country Varsity {d} - Mon,Wed,Fri - 15:45-17:15 - 08.25-11.05 - cyan\n"
+                  for d in range(_app.MAX_SPORTS))
+        + "".join(f"@project US History Research Paper {d} - 2026-09-14 - 2027-01-15 - blue\n"
+                  for d in range(_app.MAX_PROJECTS))
+        + "".join(f"@event 2026-{9 + d % 4:02d}-{(d % 28) + 1:02d} - Orthodontist appointment {d} - 15:30-16:30 - pink\n"
+                  for d in range(_app.MAX_EVENTS))
+        + "".join(f"@hw A - before - Read chapter {d} and annotate - 2026-10-{(d % 28) + 1:02d} - US History Research Paper - done\n"
+                  for d in range(_app.MAX_HW))
+        + "@pref time_format = 12h\n")
+kb = len(full.encode()) / 1024
+ck(kb < _app.MAX_SCHEDULE_BYTES / 1024 * 0.85,
+   f"every cap maxed out at once is {kb:.1f} KB, comfortably under {_app.MAX_SCHEDULE_BYTES // 1024} KB (room left for notes)")
+after = save(full)
+ck(after.count("@event") == _app.MAX_EVENTS and after.count("@hw") == _app.MAX_HW,
+   f"...and the server takes it ({after.count('@event')} events, {after.count('@hw')} homework)")
 
 srv.terminate()
 try:

@@ -817,7 +817,12 @@ MAX_PDF_BYTES = 4 * 1024 * 1024
 # Raised from 20 once people started actually living in the thing: a student
 # with a job, two lessons, a club and a standing meeting runs out at 20 and the
 # app starts refusing to hold their week. 50 of them is ~3 KB.
-MAX_EVENTS = 50
+# Raised again to 200 (Nov 2026): 50 ran out by November, because one-off
+# events pile up and nobody deletes last month's. 200 lines is ~12 KB, which
+# with 60 homework items and the classes still sits well under
+# MAX_SCHEDULE_BYTES -- so the per-student disk ceiling (and the backup sizing
+# that depends on it) does not move. The byte cap is the real guard.
+MAX_EVENTS = 200
 # A project milestone is an @hw line -- that is the whole point, it has to land
 # on a real class period. Six projects with five milestones each is 30, so the
 # old limit of 20 would have made the feature unusable on its first day.
@@ -829,6 +834,12 @@ MAX_SPORTS = 8          # three seasons, plus room for a second team or two
 # 60 milestones at ~80 bytes plus classes, events and sports is about 10 KB, so
 # 32 KB leaves room without letting one account become a database.
 MAX_SCHEDULE_BYTES = 32 * 1024
+# Local mode keeps the schedule in the browser, so none of the caps above
+# (which protect THIS server's disk) apply to it. What is left is the browser's
+# own storage: about 5 MB per site, counted in UTF-16 by some browsers -- so
+# 1 MB of UTF-8 text is at most 2 MB there, with room to spare. That is on
+# the order of 15,000 events.
+LOCAL_MAX_BYTES = 1024 * 1024
 
 
 def schedule_text_problem(text):
@@ -1535,11 +1546,13 @@ def local_edit():
     user is a blank stand-in: the template reads schedule_text out of it, and
     in local mode the page replaces that with whatever is in localStorage
     before anybody sees it."""
+    # No count caps here: see LOCAL_MAX_BYTES. "Infinity" lands in the page's
+    # JavaScript as the number, so every "n > cap" check simply never fires.
     return render_template("edit.html", user={"schedule_text": ""},
                            local=True, semesters=load_semesters(),
-                           caps={"events": MAX_EVENTS, "hw": MAX_HW,
-                                 "sports": MAX_SPORTS, "projects": MAX_PROJECTS,
-                                 "kb": MAX_SCHEDULE_BYTES // 1024})
+                           caps={"events": "Infinity", "hw": "Infinity",
+                                 "sports": "Infinity", "projects": "Infinity",
+                                 "kb": LOCAL_MAX_BYTES // 1024})
 
 
 @app.route("/api/caps")

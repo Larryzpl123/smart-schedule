@@ -23,6 +23,8 @@ The interesting design decision is that there are two modes and **one app**.
 | Password | hashed with Werkzeug's PBKDF2 | there is no account |
 | Works across devices | yes | no, one browser on one device |
 | Recoverable if lost | yes, plus per-save version history | no, only from a backup the student exported |
+| Works with no internet | no | yes, after one visit online (a service worker keeps the page and the school calendar, network-first) |
+| Limits | 200 events, 60 homework, 32 KB, to protect the server's disk | none on counts; 1 MB, the browser's storage |
 
 Local mode exists because "trust the operator with the data" is a weak answer
 to a privacy question and "the operator never keeps the data" is a strong one.

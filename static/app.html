@@ -2714,7 +2714,9 @@ function tickClock(){const d=pittNow();
     `${IS12?h:pad(h)}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${ap}`;}
 
 /* ---- loading ---- */
-async function tryFetch(path,fallback){try{const r=await fetch(path,{cache:"no-store"});if(r.ok){const t=await r.text();if(t&&t.length>5)return{text:t,live:true};}}catch(e){}return{text:fallback,live:false};}
+/* saved: set when the answer is the copy sw.js kept for local mode offline
+   (X-SSA-Saved, when it was saved) rather than the server's live one. */
+async function tryFetch(path,fallback){try{const r=await fetch(path,{cache:"no-store"});if(r.ok){const t=await r.text();if(t&&t.length>5)return{text:t,live:true,saved:r.headers.get("X-SSA-Saved")};}}catch(e){}return{text:fallback,live:false};}
 
 async function loadYear(y){
   curYear=y;
@@ -2727,6 +2729,13 @@ async function loadYear(y){
      looking at the sample, so that page stays quiet. */
   let msg = "";
   if(!SAMPLE){
+    /* Offline in local mode: say so, and how old the school's calendar is --
+       a rain day added since then is not in it. */
+    if(res.saved){
+      const sv=new Date(res.saved);
+      msg = `Offline \u00b7 school calendar as of ${MON[sv.getMonth()]} ${sv.getDate()}, ${fmtTime(sv.getHours()*60+sv.getMinutes(),IS12)}. `
+          + "It updates by itself next time you are online. ";
+    }
     if(!res.live) msg = "Embedded data (serve via a local server to load live .txt files). ";
     if(!built.hasAnchors) msg += "No cycle anchors for this year yet. Day numbers start at 1 on the first day and may be phase-shifted until you add an @anchor line.";
   }
@@ -2855,13 +2864,14 @@ async function init(){
     if(next){await loadYear(next);yearSel.value=next.id;}
   }
   STU=null;
-  /* Local mode: the schedule comes out of this browser, and the caps come
-     from the server so the two modes cannot drift apart on what a limit is. */
+  /* Local mode: the schedule comes out of this browser. And no count caps:
+     those exist to keep one account from filling the SERVER's database, and
+     nothing about local mode is on the server. The only ceiling left is the
+     browser's own storage (see LOCAL_MAX_BYTES in app.py; /local/edit
+     enforces it, and localSave() reports a full browser). */
   if(LOCAL){
-    try{
-      const r=await fetch("/api/caps",{cache:"no-store"});
-      if(r.ok) CAPS=await r.json();
-    }catch(e){}
+    CAPS={events:Infinity, hw:Infinity, sports:Infinity, projects:Infinity, bytes:CAPS.bytes};
+    warmOffline();
     const t=localText();
     if(t.trim().length>3){ STU=parseStudent(t); mergeSchool(); }
     const nav=document.getElementById("acctNav");
@@ -4523,6 +4533,23 @@ document.getElementById("gbody").addEventListener("dblclick",e=>{
    sw.js. Failure is not worth reporting: the site works fine without it. */
 if("serviceWorker" in navigator)
   window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));
+
+/* Local mode offline: ask sw.js to save everything this mode needs -- both
+   pages and every school year's calendar -- not only what this visit happened
+   to load. A few hundred KB, so at most once every six hours. */
+const WARM_KEY="ssa-offline-warm";
+function warmOffline(){
+  if(!LOCAL||!("serviceWorker" in navigator)||!navigator.onLine)return;
+  let last=0; try{last=+localStorage.getItem(WARM_KEY)||0;}catch(e){}
+  if(Date.now()-last<6*3600*1000)return;
+  navigator.serviceWorker.ready.then(reg=>{
+    if(!reg.active)return;
+    reg.active.postMessage({type:"warm-local",
+      urls:["/local","/local/app","/local/edit","/manifest-local.webmanifest",
+            PATHS.shared].concat(YEARS.map(y=>PATHS.cal(y.id)))});
+    try{localStorage.setItem(WARM_KEY,String(Date.now()));}catch(e){}
+  }).catch(()=>{});
+}
 
 /* Search. Debounced, because rendering a year of the list on every keystroke
    is a lot of work to throw away. */

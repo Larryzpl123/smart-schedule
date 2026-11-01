@@ -132,8 +132,9 @@ try:
        and caps["bytes"] == A.MAX_SCHEDULE_BYTES,
        f"/api/caps matches the server's own constants ({caps})")
     code, body = get("/local/edit")
-    ck(f"const MAX_BYTES = {A.MAX_SCHEDULE_BYTES // 1024} * 1024" in body,
-       "the editor's byte limit comes from the same place")
+    # local mode's own ceiling: the browser's storage, not the server's 32 KB
+    ck(f"const MAX_BYTES = {A.LOCAL_MAX_BYTES // 1024} * 1024" in body,
+       "the local editor's byte limit comes from app.py (LOCAL_MAX_BYTES)")
 
     print("\n[the no-account parse endpoints]")
     def post_file(path, field, blob, name):
@@ -251,26 +252,31 @@ try:
         ck(not [u for u in posts if "/api/quick" in u],
            f"and no request went out for it ({posts})")
 
-        print("\n[the caps are enforced without a server to do it]")
+        print("\n[no count caps here; the browser's storage is the ceiling]")
         pg.goto(BASE + "/local/edit")
         pg.wait_for_timeout(400)
         pg.click("#modeText")
-        pg.fill("#rawText", "X\n27\n\n" + ("@event Tue - Thing - 10:00-11:00 - red\n"
-                                           * (60)))
+        n = A.MAX_EVENTS + 10
+        pg.fill("#rawText", "X\n27\n\n" + ("@event Tue - Thing - 10:00-11:00 - red\n" * n))
+        pg.click("#schedForm button[type=submit]")
+        pg.wait_for_timeout(300)
+        saved = pg.evaluate("localStorage.getItem('ssa-local-schedule')") or ""
+        ck(saved.count("@event") == n,
+           f"{n} events save here -- the account cap ({A.MAX_EVENTS}) protects the server's disk, not this browser")
+        pg.evaluate("t => localStorage.setItem('ssa-local-schedule', t)", SCHED)
+        pg.goto(BASE + "/local/edit")
+        pg.wait_for_timeout(400)
+        pg.click("#modeText")
+        pg.evaluate("t => document.getElementById('rawText').value = t",
+                    "X\n27\n\n" + ("# padding padding padding\n" * 45000))
         pg.click("#schedForm button[type=submit]")
         pg.wait_for_timeout(300)
         msg = pg.locator("#localFlash").inner_text()
-        ck("limit is 50" in msg, f"too many events is refused here too ({msg})")
+        ck("KB" in msg and f"limit is {A.LOCAL_MAX_BYTES // 1024} KB" in msg,
+           f"over the browser-storage ceiling is refused, with the size ({msg})")
         kept = pg.evaluate("localStorage.getItem('ssa-local-schedule')")
         ck("AP Calculus BC" in kept,
            "and the refusal did not overwrite what was already there")
-
-        pg.fill("#rawText", "X\n27\n\n" + ("# padding padding padding\n" * 2000))
-        pg.click("#schedForm button[type=submit]")
-        pg.wait_for_timeout(300)
-        msg = pg.locator("#localFlash").inner_text()
-        ck("KB" in msg and "limit is 32 KB" in msg,
-           f"an oversized paste is refused with the server's sentence ({msg})")
 
         print("\n[backup and restore]")
         pg.goto(BASE + "/local/app")

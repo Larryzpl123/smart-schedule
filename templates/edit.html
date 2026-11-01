@@ -2,6 +2,8 @@
 {% block title %}Edit schedule{% endblock %}
 {% block cardclass %}wide{% endblock %}
 {% block body %}
+{# "Max 200." with an account; local mode has no count caps (see LOCAL_MAX_BYTES). #}
+{% macro capnote(n) %}{% if n == "Infinity" %}No limit here.{% else %}Max {{ n }}.{% endif %}{% endmacro %}
 <h1>Edit my schedule</h1>
 
 <div style="display:flex;gap:.5rem;margin-bottom:1rem">
@@ -88,20 +90,20 @@
     <div id="terms"></div>
     <button type="button" id="addTerm" style="background:var(--panel2);color:var(--ink);margin-top:.6rem">+ Add a term (semester)</button>
 
-    <label style="margin-top:1rem">Sports <span class="hint" style="display:inline;margin:0">(one row per season. They are not tied to a semester, so fall, winter and spring all fit. Max {{ caps.sports }}.)</span></label>
+    <label style="margin-top:1rem">Sports <span class="hint" style="display:inline;margin:0">(one row per season. They are not tied to a semester, so fall, winter and spring all fit. {{ capnote(caps.sports) }})</span></label>
     <div id="sportRows"></div>
     <button type="button" id="addSport" style="background:var(--panel2);color:var(--ink);margin-top:.4rem;width:auto;padding:.4rem .8rem;font-size:.78rem">+ Add a sport</button>
 
-    <label style="margin-top:1rem">Projects <span class="hint" style="display:inline;margin:0">(a long piece of work with a start and an end: a term paper, a competition build. The pieces due along the way go in <b>Homework</b> below and get attached to it. Max {{ caps.projects }}.)</span></label>
+    <label style="margin-top:1rem">Projects <span class="hint" style="display:inline;margin:0">(a long piece of work with a start and an end: a term paper, a competition build. The pieces due along the way go in <b>Homework</b> below and get attached to it. {{ capnote(caps.projects) }})</span></label>
     <div id="projRows"></div>
     <button type="button" id="addProj" style="background:var(--panel2);color:var(--ink);margin-top:.4rem;width:auto;padding:.4rem .8rem;font-size:.78rem">+ Add a project</button>
 
-    <label style="margin-top:1rem">My events <span class="hint" style="display:inline;margin:0">(things that aren't classes: a teacher meeting, piano, a club. Max {{ caps.events }}.)</span></label>
+    <label style="margin-top:1rem">My events <span class="hint" style="display:inline;margin:0">(things that aren't classes: a teacher meeting, piano, a club. {{ capnote(caps.events) }})</span></label>
     <datalist id="durList"></datalist>
     <div id="eventRows"></div>
     <button type="button" id="addEvent" style="background:var(--panel2);color:var(--ink);margin-top:.4rem;width:auto;padding:.4rem .8rem;font-size:.78rem">+ Add an event</button>
 
-    <label style="margin-top:1rem">Homework <span class="hint" style="display:inline;margin:0">(hung on a class, so it follows that class around the rotation. Max {{ caps.hw }}.)</span></label>
+    <label style="margin-top:1rem">Homework <span class="hint" style="display:inline;margin:0">(hung on a class, so it follows that class around the rotation. {{ capnote(caps.hw) }})</span></label>
     <div id="hwRows"></div>
     <button type="button" id="addHw" style="background:var(--panel2);color:var(--ink);margin-top:.4rem;width:auto;padding:.4rem .8rem;font-size:.78rem">+ Add homework</button>
     <div class="hint" id="capWarn" style="color:var(--bad);display:none"></div>
@@ -140,7 +142,7 @@
           <code>- days 2,6</code>: only meets on those rotation days. Use it for a
           lab that borrows an otherwise-free period.<br>
           <code>A - Physics 2 - PY430 - 1 - Ms. Rivera - MC 210 - blue - La - days 2,6</code><br><br>
-          <b style="color:var(--ink)">Your own events</b> (max {{ caps.events }}), any of:<br>
+          <b style="color:var(--ink)">Your own events</b>{% if caps.events != "Infinity" %} (max {{ caps.events }}){% endif %}, any of:<br>
           <code>@event 2026-09-10 - Meet Mr. B - 11:50-12:40 - gray</code><br>
           <code>@event Mon,Wed - Piano - 16:00-17:00 - 09.01-12.20 - pink</code><br>
           <code>@event monthly Thu#1 - Form Meeting - 10:05-10:30 - pink</code>
@@ -148,7 +150,7 @@
           <code>@event every 90 from 2026-09-07 - Renew hosting - 19:00-19:15 - gray</code>
           — a fixed number of days from a date, for the things that fall on no
           weekday and no day of the month.<br><br>
-          <b style="color:var(--ink)">Homework</b> (max {{ caps.hw }}) hangs on a class letter, not a time:<br>
+          <b style="color:var(--ink)">Homework</b>{% if caps.hw != "Infinity" %} (max {{ caps.hw }}){% endif %} hangs on a class letter, not a time:<br>
           <code>@hw A - before - Read ch.4 - 2026-09-10</code> (<code>before</code> or <code>during</code>)<br>
           Two optional fields on the end: which project it belongs to, and
           <code>done</code>:<br>
@@ -1010,7 +1012,8 @@ async function localIcs(){
   fi.value="";                            // let the same file be picked again
   let r,j;
   try{ r=await fetch("/api/parse-ics",{method:"POST",body:fd}); j=await r.json(); }
-  catch(e){ box.textContent="Upload failed: "+e; return; }
+  catch(e){ box.textContent=navigator.onLine?("Upload failed: "+e)
+      :"Importing needs the internet (the file is read on our server). Everything else here works offline."; return; }
   if(!r.ok||j.error){ box.textContent=j.error||("Error "+r.status); return; }
   drawIcs(j, f.name);
 }
@@ -1251,7 +1254,8 @@ document.getElementById("pdfFile").onchange = async ev => {
   const PDF_URL = LOCAL ? "/api/parse-pdf" : "{{ url_for('edit_import_pdf') }}";
   try { r = await fetch(PDF_URL, {method:"POST", body:fd});
         j = await r.json(); }
-  catch(e){ s.style.color="var(--bad)"; s.textContent="Upload failed: "+e; return; }
+  catch(e){ s.style.color="var(--bad)"; s.textContent=navigator.onLine?("Upload failed: "+e)
+      :"Importing needs the internet (the PDF is read on our server). Everything else here works offline."; return; }
   if(!r.ok || j.error){ s.style.color="var(--bad)"; s.textContent=j.error||("Error "+r.status); return; }
   loadIntoEditor(j.text);
   mode="text"; bT.onclick();

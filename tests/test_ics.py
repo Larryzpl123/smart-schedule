@@ -295,14 +295,15 @@ ck(kind == "error" and mine().count("@pref background") == 0,
 
 # the cap refuses the whole batch rather than half of it
 import app as _app
+# sized from the cap, not hardcoded: 28 + 28 only went over when the cap was 50
 big = "Jane Doe\n27 - Senior\n\n" + "".join(
-    f"@event 2026-03-{d:02d} - filler {d} - allday - gray\n"
-    for d in range(1, 29))
+    f"@event 2026-03-{(d % 28) + 1:02d} - filler {d} - allday - gray\n"
+    for d in range(_app.MAX_EVENTS - 10))
 op.open(urllib.request.Request(BASE + "/edit", urllib.parse.urlencode(
     {"schedule_text": big + "@pref time_format = 12h\n"}).encode()))
 have = mine().count("@event")
 many = [f"@event 2027-04-{d:02d} - extra {d} - allday - gray"
-        for d in range(1, 29)]
+        for d in range(1, 29)]          # 28 > the 10 left
 kind, msg = flash_of(confirm(many))
 ck(kind == "error" and str(_app.MAX_EVENTS) in msg,
    f"going over the event cap is refused with the real number ({msg[:90]})")
