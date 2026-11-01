@@ -210,15 +210,16 @@ try:
         ap.goto(BASE + "/app")
         ap.wait_for_selector("#gbody .col", timeout=8000)
         ap.wait_for_timeout(500)
-        ck(ap.is_visible("#setBtn"), "the account app has a settings button now")
-        ap.click("#setBtn")
-        ap.wait_for_timeout(300)
-        ck(ap.is_visible("#setOffline") and not ap.is_visible("#setRemind"),
-           "its settings show the offline switch, not local mode's backup reminders")
-        ck(not ap.is_checked("#setOffline") and "Off" in (ap.text_content("#setOfflineState") or ""),
+        ck(ap.locator("#setBtn").count() == 0, "no gear button on the schedule page")
+        ap.goto(BASE + "/edit#device")
+        ap.wait_for_timeout(600)
+        ck(ap.is_visible("#devOffline") and not ap.locator("#devRemind").count(),
+           "the offline switch is in Edit my schedule, On this device (and not local mode's reminders)")
+        ck(not ap.is_checked("#devOffline") and "Off" in (ap.text_content("#devOfflineState") or ""),
            "the switch is OFF by default")
         ck(not has_acct(ap), "...and nothing of the account is kept")
-        ap.click("#setClose")
+        ap.goto(BASE + "/app")
+        ap.wait_for_selector("#gbody .col", timeout=8000)
         ctx.set_offline(True)
         try:
             ap.reload(timeout=6000)
@@ -232,9 +233,9 @@ try:
         ap.wait_for_timeout(400)
 
         # turn it on
-        ap.click("#setBtn")
-        ap.wait_for_timeout(200)
-        ap.check("#setOffline")
+        ap.goto(BASE + "/edit#device")
+        ap.wait_for_timeout(400)
+        ap.check("#devOffline")
         keys = []
         for _ in range(40):
             keys = acct_keys(ap)
@@ -243,9 +244,13 @@ try:
             ap.wait_for_timeout(250)
         ck({"/app", "/api/my-schedule", "/api/calendar/2026-2027", "/api/schedule-shared"} <= set(keys),
            f"switch on: the app, my schedule and the school's data are saved ({sorted(keys)})")
-        ap.wait_for_timeout(800)
-        ck("On." in (ap.text_content("#setOfflineState") or ""), f"and it says so ({ap.text_content('#setOfflineState')!r})")
-        ap.click("#setClose")
+        ap.wait_for_timeout(1200)
+        ap.reload(); ap.wait_for_timeout(600)
+        ck(ap.is_checked("#devOffline") and "On." in (ap.text_content("#devOfflineState") or ""),
+           f"and it says so ({ap.text_content('#devOfflineState')!r})")
+        ap.goto(BASE + "/app")
+        ap.wait_for_selector("#gbody .col", timeout=8000)
+        ap.wait_for_timeout(400)
 
         ctx.set_offline(True)
         ap.reload()
@@ -296,9 +301,8 @@ try:
         ap.goto(BASE + "/app")
         ap.wait_for_selector("#gbody .col", timeout=8000)
         ap.wait_for_timeout(400)
-        ap.click("#setBtn"); ap.wait_for_timeout(200)
-        ap.check("#setOffline"); ap.wait_for_timeout(1000)
-        ap.click("#setClose")
+        ap.goto(BASE + "/edit#device"); ap.wait_for_timeout(400)
+        ap.check("#devOffline"); ap.wait_for_timeout(1200)
         ck(has_acct(ap), "(on again)")
         ap.goto(BASE + "/logout")
         ap.wait_for_timeout(500)
@@ -311,12 +315,11 @@ try:
         ap.goto(BASE + "/app")
         ap.wait_for_selector("#gbody .col", timeout=8000)
         ap.wait_for_timeout(400)
-        ap.click("#setBtn"); ap.wait_for_timeout(200)
-        ap.check("#setOffline"); ap.wait_for_timeout(1000)
-        ap.uncheck("#setOffline"); ap.wait_for_timeout(1000)
-        ck(not has_acct(ap) and "Off" in (ap.text_content("#setOfflineState") or ""),
+        ap.goto(BASE + "/edit#device"); ap.wait_for_timeout(400)
+        ap.check("#devOffline"); ap.wait_for_timeout(1200)
+        ap.uncheck("#devOffline"); ap.wait_for_timeout(1200)
+        ck(not has_acct(ap) and "Off" in (ap.text_content("#devOfflineState") or ""),
            "switching it off deletes the copy straight away")
-        ap.click("#setClose")
 
         ck(not errs, f"no page errors: {errs}")
         b.close()

@@ -278,31 +278,37 @@ try:
         ck("AP Calculus BC" in kept,
            "and the refusal did not overwrite what was already there")
 
-        print("\n[backup and restore]")
+        print("\n[backup and restore: in Edit my schedule, On this device]")
         pg.goto(BASE + "/local/app")
         pg.wait_for_timeout(1200)
         pg.evaluate("document.querySelectorAll('dialog[open]')"
                     ".forEach(d => d.close())")
-        ck(pg.locator("#bkBtn").is_visible(), "local mode shows the Backup button")
-        pg.click("#bkBtn")
-        pg.wait_for_timeout(300)
-        shown = pg.input_value("#bkText") if pg.locator("#bkText").count() else ""
-        ck("AP Calculus BC" in shown,
-           "the backup box holds the schedule as plain text")
-        # wipe the browser and put it back from the text
+        ck(pg.locator("#bkBtn").count() == 0 and pg.locator("#setBtn").count() == 0,
+           "the schedule page has no Backup or gear button any more (they moved to the editor)")
+        pg.goto(BASE + "/local/edit#device")
+        pg.wait_for_timeout(500)
+        ck(pg.locator("#device").is_visible() and pg.locator("#devBackup").is_visible(),
+           "the editor has an On this device section with a backup button")
+        with pg.expect_download() as dl:
+            pg.click("#devBackup")
+        path = dl.value.path()
+        shown = open(path, encoding="utf-8").read()
+        ck("AP Calculus BC" in shown, "the backup is the schedule as plain text")
+        # wipe the browser and put it back from the file
         pg.evaluate("localStorage.removeItem('ssa-local-schedule')")
-        pg.reload()
+        pg.goto(BASE + "/local/app")
         pg.wait_for_timeout(1200)
         ck("Local mode." in pg.inner_text("body"),
            "with the key gone it is empty again")
-        pg.click("#bkBtn")
-        pg.wait_for_timeout(300)
-        pg.fill("#rsText", SCHED)
-        pg.click("#rsPaste")
-        pg.wait_for_timeout(800)
+        pg.goto(BASE + "/local/edit")
+        pg.wait_for_timeout(400)
+        pg.set_input_files("#importFile", path)
+        pg.wait_for_timeout(500)
+        pg.click("#schedForm button[type=submit]")
+        pg.wait_for_timeout(500)
         back = pg.evaluate("localStorage.getItem('ssa-local-schedule')")
         ck(back is not None and "AP Calculus BC" in back,
-           "pasting the text back restores it")
+           "loading the file back and saving restores it")
 
         print("\n[the daily reminder]")
         p2 = ctx.new_page()
@@ -424,7 +430,7 @@ try:
         p4.evaluate("localStorage.setItem('ssa-local-install','on');"
                     "localStorage.setItem('ssa-local-install-until','2020-01-01')")
         p4.reload(); p4.wait_for_timeout(1400)
-        ck(p4.locator("#addDlg").is_visible(), "Settings can turn it back on")
+        ck(p4.locator("#addDlg").is_visible(), "turning it back on (On this device) brings it back")
         p4.keyboard.press("Escape")
         p4.wait_for_timeout(200)
         p4.reload(); p4.wait_for_timeout(1400)

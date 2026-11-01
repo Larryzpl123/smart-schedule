@@ -108,11 +108,10 @@
     <button type="button" id="addHw" style="background:var(--panel2);color:var(--ink);margin-top:.4rem;width:auto;padding:.4rem .8rem;font-size:.78rem">+ Add homework</button>
     <div class="hint" id="capWarn" style="color:var(--bad);display:none"></div>
 
-    <label style="margin-top:1rem">Time format</label>
-    <select id="f_timefmt" style="width:auto">
-      <option value="12h">12-hour</option>
-      <option value="24h">24-hour</option>
-    </select>
+    <!-- 12h / 24h is the button on the schedule page now (it writes
+         "@pref time_format"); this only carries the current value through a
+         form save, and labels the time pickers to match. -->
+    <input type="hidden" id="f_timefmt" value="12h">
   </div>
 
   <div id="textPane" style="display:none">
@@ -186,6 +185,47 @@
   <button type="submit">Save</button>
 </form>
 
+<!-- Everything that is about THIS browser rather than the schedule: it is
+     not saved with the schedule and does not follow you to another device.
+     It used to sit behind a gear button on the schedule page. -->
+<div id="device" style="margin-top:1.6rem;padding-top:1rem;border-top:1px solid var(--line)">
+  <h2 style="font-size:1rem;margin:0 0 .2rem">On this device</h2>
+  <div class="hint" style="margin:0 0 .8rem">Settings for this browser only. They are not part of your schedule and do not follow you to another device.</div>
+  {% if local %}
+  <div style="font-size:.8rem;line-height:1.6;margin-bottom:.8rem">
+    <b>Backup.</b> Your schedule is only in this browser.
+    <button type="button" id="devBackup" class="filebtn" style="width:auto;margin:0 .3rem;padding:.3rem .6rem;font-size:.76rem">&#11123; Download a backup (.txt)</button>
+    <span class="hint" style="display:inline;margin:0">To put one back: <b>Load .txt</b> at the top, then Save.</span>
+  </div>
+  <label style="display:flex;gap:.45rem;align-items:center;cursor:pointer;font-size:.8rem;margin:.3rem 0">
+    <input type="checkbox" id="devRemind" style="width:auto;margin:0">
+    Remind me once a day that this data is only in this browser</label>
+  <label style="display:flex;gap:.45rem;align-items:center;cursor:pointer;font-size:.8rem;margin:.3rem 0">
+    <input type="checkbox" id="devInstall" style="width:auto;margin:0">
+    Remind me to install this as an app</label>
+  <div class="hint" style="margin:.2rem 0 .8rem">
+    <a href="/local/app#install" style="color:var(--accent)">How do I install it, and is my storage safe?</a>
+    &middot; Want it on every device instead? <a href="/?choose=1" style="color:var(--accent)">Compare with an account</a>
+    (a separate copy: download a backup here first).</div>
+  {% else %}
+  <label style="display:flex;gap:.45rem;align-items:center;cursor:pointer;font-size:.8rem;margin:.3rem 0">
+    <input type="checkbox" id="devOffline" style="width:auto;margin:0">
+    Keep a copy on this device for when there is no internet</label>
+  <div class="hint" style="margin:.2rem 0 .3rem;line-height:1.55">
+    The schedule then opens offline as it was last loaded, to look at, not to
+    change. Only turn this on on your own device: anyone using this browser
+    offline could see it. Logging out deletes the copy and turns this off.</div>
+  <div class="hint" id="devOfflineState" style="margin:0 0 .8rem"></div>
+  {% endif %}
+  <div style="font-size:.8rem;margin:.4rem 0 .2rem"><b>Toolbar</b></div>
+  <label style="display:flex;gap:.45rem;align-items:center;cursor:pointer;font-size:.8rem;margin:.25rem 0">
+    <input type="radio" name="devToolbar" value="segmented" style="width:auto;margin:0">
+    Every option showing: <span class="tbdemo"><b>Week</b> Month List</span></label>
+  <label style="display:flex;gap:.45rem;align-items:center;cursor:pointer;font-size:.8rem;margin:.25rem 0">
+    <input type="radio" name="devToolbar" value="compact" style="width:auto;margin:0">
+    Compact, one button each, click to switch: <span class="tbdemo"><b>Week &#8644;</b></span></label>
+</div>
+
 <div class="links"><a href="{% if local %}/local/app{% else %}{{ url_for('app_view') }}{% endif %}">Back to schedule</a></div>
 
 <style>
@@ -211,6 +251,7 @@ function semYears(){const s=new Set();SEMESTERS.forEach(x=>s.add(x.year));return
 function semFind(year,term){return SEMESTERS.find(x=>x.year===year&&x.term===term);}
 function semByRange(from,to){return SEMESTERS.find(x=>x.from===from&&x.to===to);}
 const LOCAL = {{ 'true' if local else 'false' }};
+let PREFS_KEEP = [];      // @pref lines other than time_format, written back as they were
 const LS_KEY = "ssa-local-schedule";     // the same key the schedule page uses
 /* Local mode renders with a blank user, so the server's copy is always "".
    Reading localStorage here is the whole difference between the two modes:
@@ -236,7 +277,7 @@ D - Robotics - CS301 - 1 - Ms. Patel - GH 015 - orange - Ea
 document.getElementById("exampleBox").textContent=EXAMPLE;
 
 function parse(text){
-  const model={name:"",form:"",timefmt:"12h",terms:[],sports:[],projects:[],events:[],hw:[]};
+  const model={name:"",form:"",timefmt:"12h",prefs:[],terms:[],sports:[],projects:[],events:[],hw:[]};
   let cur=null, idx=0, noteTo=null;
   for(const raw of (text||"").split(/\r?\n/)){
     const line=raw.trim();
@@ -255,7 +296,10 @@ function parse(text){
     if(line.startsWith("@project")){model.projects.push(line.replace("@project","").trim());noteTo={arr:model.projects,i:model.projects.length-1};continue;}
     if(line.startsWith("@event")){model.events.push(line.replace("@event","").trim());noteTo={arr:model.events,i:model.events.length-1};continue;}
     if(line.startsWith("@hw")){model.hw.push(line.replace("@hw","").trim());noteTo={arr:model.hw,i:model.hw.length-1};continue;}
-    if(line.startsWith("@pref")){const m=line.match(/time_format\s*=\s*(\w+)/);if(m)model.timefmt=m[1];continue;}
+    /* Every other @pref line (background, highlight colours...) is kept
+       as written. The form used to rebuild the file with time_format only,
+       so saving in Form mode silently threw the rest away. */
+    if(line.startsWith("@pref")){const m=line.match(/time_format\s*=\s*(\w+)/);if(m)model.timefmt=m[1];else model.prefs.push(line);continue;}
     if(/^[A-H]\s*-/.test(line)){if(cur){const p=line[0];cur.classes[p]=line.slice(1).replace(/^\s*-\s*/,"");}continue;}
     if(idx===0){model.name=line;idx++;continue;}
     if(idx===1){model.form=line;idx++;continue;}
@@ -394,6 +438,7 @@ function formToText(){
     const v=hwRowToText(r); if(v)out.push(`@hw ${v}`,...noteOut(r));
   });
   if(out[out.length-1]!=="")out.push("");
+  PREFS_KEEP.forEach(l=>out.push(l));
   out.push(`@pref time_format = ${tf}`);
   return out.join("\n");
 }
@@ -1185,7 +1230,7 @@ addEventListener("beforeunload", e => { if (DIRTY) { e.preventDefault(); e.retur
 const model=parse(SAVED|| "");
 document.getElementById("f_name").value=model.name;
 document.getElementById("f_form").value=model.form;
-document.getElementById("f_timefmt").value=model.timefmt;
+document.getElementById("f_timefmt").value=model.timefmt; PREFS_KEEP=model.prefs;
 // the rows are built below, and they read f_timefmt themselves (timeOpts()),
 // so the only thing that needs relabelling later is a LIVE change of it
 if(model.terms.length) model.terms.forEach(addTermCard); else addTermCard();
@@ -1204,7 +1249,7 @@ bF.onclick=()=>{ if(mode==="text"){
     const m=parse(document.getElementById("rawText").value);
     document.getElementById("f_name").value=m.name;
     document.getElementById("f_form").value=m.form;
-    document.getElementById("f_timefmt").value=m.timefmt;
+    document.getElementById("f_timefmt").value=m.timefmt; PREFS_KEEP=m.prefs;
     termsEl.innerHTML=""; (m.terms.length?m.terms:[null]).forEach(t=>addTermCard(t));
     document.getElementById("sportRows").innerHTML="";
     document.getElementById("eventRows").innerHTML="";
@@ -1228,7 +1273,7 @@ function loadIntoEditor(text){
   const m = parse(text);
   document.getElementById("f_name").value = m.name;
   document.getElementById("f_form").value = m.form;
-  document.getElementById("f_timefmt").value = m.timefmt;
+  document.getElementById("f_timefmt").value = m.timefmt; PREFS_KEEP = m.prefs;
   termsEl.innerHTML = "";
   (m.terms.length ? m.terms : [null]).forEach(t => addTermCard(t));
   document.getElementById("sportRows").innerHTML = "";
@@ -1370,5 +1415,81 @@ if(LOCAL){
     setTimeout(()=>URL.revokeObjectURL(a.href), 30000);
   };
 }
+</script>
+<style>
+  .tbdemo{font-size:.72rem;border:1px solid var(--line);border-radius:6px;padding:.1rem .4rem;color:var(--ink-dim)}
+  .tbdemo b{color:var(--ink)}
+</style>
+<script>
+/* ---------------- On this device ----------------
+   Per-browser settings, read by the schedule page from the same origin's
+   storage. The keys are the schedule page's (app.html) -- same names, so the
+   two pages agree on what each switch means. */
+(function(){
+  const get=k=>{try{return localStorage.getItem(k)||"";}catch(e){return "";}};
+  const set=(k,v)=>{try{localStorage.setItem(k,v);}catch(e){}};
+
+  // toolbar style: "segmented" (default) or "compact"
+  const TB_KEY="ssa-toolbar";
+  const cur=get(TB_KEY)==="compact"?"compact":"segmented";
+  document.querySelectorAll("input[name=devToolbar]").forEach(r=>{
+    r.checked=(r.value===cur);
+    r.onchange=()=>{ if(r.checked) set(TB_KEY,r.value); };
+  });
+
+  if(LOCAL){
+    // the same keys the reminders on the schedule page read
+    const LS_REMIND="ssa-local-remind", LS_SNOOZE="ssa-local-remind-until";
+    const LS_ADD="ssa-local-install", LS_ADD_UNTIL="ssa-local-install-until";
+    const rem=document.getElementById("devRemind"), ins=document.getElementById("devInstall");
+    rem.checked=get(LS_REMIND)!=="off"; ins.checked=get(LS_ADD)!=="off";
+    rem.onchange=()=>{ set(LS_REMIND,rem.checked?"on":"off"); if(rem.checked)set(LS_SNOOZE,""); };
+    ins.onchange=()=>{ set(LS_ADD,ins.checked?"on":"off"); if(ins.checked)set(LS_ADD_UNTIL,""); };
+    document.getElementById("devBackup").onclick=()=>document.getElementById("dlBtn").click();
+    return;
+  }
+
+  /* Account mode: keep an offline copy. The switch IS the cache: sw.js keeps
+     account copies only while "ssa-acct-v1" exists, so off = delete it. The
+     marker says whose copy it is (the schedule page deletes a copy that is
+     not the logged-in account's). Names shared with app.html and sw.js. */
+  const ACCT_CACHE="ssa-acct-v1", OWNER_KEY="/__ssa-owner";
+  const ME={{ (user.email if not local else "")|tojson }};
+  const YEARS={{ (calendar_years or [])|tojson }};
+  const cb=document.getElementById("devOffline"), st=document.getElementById("devOfflineState");
+  if(!("caches" in window)||!("serviceWorker" in navigator)){
+    cb.disabled=true; st.textContent="This browser cannot keep an offline copy."; return;
+  }
+  const fmt=d=>{const h=d.getHours(),m=String(d.getMinutes()).padStart(2,"0");
+    return `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]} ${d.getDate()}, ${(h%12)||12}:${m} ${h<12?"AM":"PM"}`;};
+  async function paint(){
+    const on=await caches.has(ACCT_CACHE);
+    cb.checked=on;
+    if(!on){st.textContent="Off. Nothing of yours is kept on this device.";return;}
+    try{
+      const m=await (await caches.open(ACCT_CACHE)).match("/api/my-schedule");
+      const sv=m&&m.headers.get("X-SSA-Saved");
+      st.textContent=sv?`On. Copy saved ${fmt(new Date(sv))}; it refreshes every time you open the schedule online.`
+                       :"On. Saving a copy\u2026";
+    }catch(e){st.textContent="On.";}
+  }
+  cb.onchange=async()=>{
+    cb.disabled=true;
+    try{
+      if(!cb.checked){ await caches.delete(ACCT_CACHE); }
+      else{
+        const c=await caches.open(ACCT_CACHE);              // this is "on"
+        await c.put(OWNER_KEY,new Response(ME));
+        await navigator.serviceWorker.register("/sw.js");
+        const reg=await navigator.serviceWorker.ready;
+        if(reg.active) reg.active.postMessage({type:"warm-acct",
+          urls:["/app","/api/my-schedule","/api/schedule-shared","/manifest.webmanifest"]
+               .concat(YEARS.map(y=>"/api/calendar/"+y))});
+      }
+    }catch(e){}
+    setTimeout(async()=>{ await paint(); cb.disabled=false; },900);
+  };
+  paint();
+})();
 </script>
 {% endblock %}

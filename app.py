@@ -802,6 +802,7 @@ def edit():
         flash("Schedule saved.", "ok")
         return redirect(url_for("edit"))
     return render_template("edit.html", user=user, semesters=load_semesters(),
+                           calendar_years=calendar_years(),
                            caps={"events": MAX_EVENTS, "hw": MAX_HW,
                                  "sports": MAX_SPORTS, "projects": MAX_PROJECTS,
                                  "kb": MAX_SCHEDULE_BYTES // 1024})
@@ -1202,6 +1203,47 @@ def edit_import_ics_confirm():
     return redirect(url_for("edit"))
 
 
+def calendar_years():
+    """The school years there is a calendar for, e.g. ["2025-2026", "2026-2027"]
+    -- what the editor's offline switch asks sw.js to keep a copy of."""
+    try:
+        names = os.listdir(CALENDAR_DIR)
+    except OSError:
+        return []
+    return sorted(n[:-4] for n in names
+                  if re.fullmatch(r"\d{4}-\d{4}\.txt", n))
+
+
+# The 12h / 24h button on the schedule page. It used to change the view only,
+# and the next load put back whatever "@pref time_format" in the file said --
+# a switch that quietly undid itself. Now it writes that line, which is the
+# one place the setting lives (and so it follows the student to every device).
+# Only keys listed here can be written this way.
+PREF_VALUES = {"time_format": ("12h", "24h")}
+
+
+def set_pref_line(text, key, value):
+    """text with exactly one "@pref key = value" line: replaced in place if
+    there was one (duplicates dropped), else added at the end."""
+    lines = (text or "").replace("\r\n", "\n").split("\n")
+    pat = re.compile(r"^\s*@pref\s+" + re.escape(key) + r"\s*=")
+    new = f"@pref {key} = {value}"
+    out, done = [], False
+    for l in lines:
+        if pat.match(l):
+            if not done:
+                out.append(new)
+                done = True
+            continue
+        out.append(l)
+    if not done:
+        while out and not out[-1].strip():
+            out.pop()
+        out.append(new)
+        out.append("")
+    return "\n".join(out)
+
+
 def _count_lines(text, prefix):
     return [l for l in (text or "").replace("\r\n", "\n").split("\n")
             if l.strip().startswith(prefix)]
@@ -1386,6 +1428,24 @@ def api_quick_done():
     return jsonify({"ok": True, "line": lines[i]})
 
 
+@app.route("/api/pref", methods=["POST"])
+@login_required
+def api_pref():
+    """Set one @pref line (see PREF_VALUES). localApi() in app.html is the
+    same thing for local mode."""
+    u = current_user()
+    data = request.get_json(silent=True) or {}
+    key, value = data.get("key"), data.get("value")
+    if key not in PREF_VALUES or value not in PREF_VALUES[key]:
+        return jsonify({"error": "Not a setting this can change."}), 400
+    merged = set_pref_line(u["schedule_text"] or "", key, value)
+    problem = schedule_text_problem(merged)
+    if problem:
+        return jsonify({"error": problem}), 400
+    set_schedule(u, merged, remember=False)
+    return jsonify({"ok": True, "key": key, "value": value})
+
+
 @app.route("/api/quick-edit", methods=["POST"])
 @login_required
 def api_quick_edit():
@@ -1550,6 +1610,7 @@ def local_edit():
     # JavaScript as the number, so every "n > cap" check simply never fires.
     return render_template("edit.html", user={"schedule_text": ""},
                            local=True, semesters=load_semesters(),
+                           calendar_years=calendar_years(),
                            caps={"events": "Infinity", "hw": "Infinity",
                                  "sports": "Infinity", "projects": "Infinity",
                                  "kb": LOCAL_MAX_BYTES // 1024})

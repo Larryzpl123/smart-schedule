@@ -275,7 +275,7 @@ try:
         ck(row.query_selector(".ev_allday").is_checked(),
            "reading it back gives the tick, not a raw line")
 
-        # ---- the form's time dropdowns follow its own Time format setting --
+        # ---- the form's time dropdowns follow the file's time format --------
         pg.goto(BASE + "/edit")
         pg.wait_for_selector("#eventRows .evrow")
         def formTimes():
@@ -285,7 +285,18 @@ try:
                 return {labels: o.map(x => x.textContent),
                         values: o.map(x => x.value)};
             }""")
-        pg.select_option("#f_timefmt", "12h")
+        # The setting is the file's "@pref time_format" now (the 12h/24h button
+        # on the schedule page writes it); there is no control for it here.
+        def set_fmt(v):
+            pg.click("#modeText")
+            t = pg.input_value("#rawText")
+            import re as _re
+            t = _re.sub(r"@pref time_format = \w+", f"@pref time_format = {v}", t)
+            if "@pref time_format" not in t:
+                t += f"\n@pref time_format = {v}\n"
+            pg.fill("#rawText", t)
+            pg.click("#modeForm")
+        set_fmt("12h")
         pg.wait_for_timeout(300)
         f12 = formTimes()
         ck("4:00 PM" in f12["labels"] and "16:00" not in f12["labels"],
@@ -293,7 +304,7 @@ try:
            f"form offering 16:00 while the grid says 4:00 PM is two apps "
            f"({f12['labels'][:3]})")
         ck("16:00" in f12["values"], "the value stays 24-hour")
-        pg.select_option("#f_timefmt", "24h")
+        set_fmt("24h")
         pg.wait_for_timeout(300)
         f24 = formTimes()
         ck("16:00" in f24["labels"] and f24["values"] == f12["values"],

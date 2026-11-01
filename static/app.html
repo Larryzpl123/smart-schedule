@@ -439,6 +439,10 @@
   #printTable .psub{font-size:calc(var(--ps,1)*10px);color:var(--pp-sub);overflow-wrap:anywhere}
   #printTable .pnote{font-size:calc(var(--ps,1)*10px);font-style:italic;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:1px}
   #printTable .pit.done .pnm{text-decoration:line-through;color:var(--pp-dim)}
+  /* Compact toolbar (Edit my schedule > On this device): each switch is one
+     button showing where you are; a click moves to the next. Saves room. */
+  html.tb-compact .toolbar .seg button:not(.on){display:none}
+  html.tb-compact .toolbar .seg button.on::after{content:" \21C4";opacity:.55;font-weight:400}
   /* the four choices, as pictures of this very week */
   #prCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
   #prCards button{display:block;width:100%;margin:0;padding:.4rem .4rem .35rem;background:var(--panel2);
@@ -471,10 +475,6 @@
   <input id="find" style="display:none" placeholder="Search  /"
          title="Search everything you have, all year. Press / from anywhere.">
   <div class="spacer"></div>
-  <button id="bkBtn" style="display:none;width:auto;margin:0;padding:.45rem .6rem;font-size:.78rem;line-height:1"
-          title="Back up or restore the schedule kept in this browser">&#9921; Backup</button>
-  <button id="setBtn" style="display:none;width:auto;margin:0;padding:.45rem .6rem;font-size:.95rem;line-height:1"
-          title="Settings" aria-label="Settings">&#9881;</button>
   <button id="icsBtn" title="Download this year as a calendar file (.ics)"
           style="width:auto;margin:0;padding:.45rem .6rem;font-size:.95rem;line-height:1"
           aria-label="Download .ics">⤓</button>
@@ -584,44 +584,6 @@
   </div>
 </dialog>
 
-<dialog id="backupDlg">
-  <h3>Back up your schedule</h3>
-  <div style="font-size:.76rem;color:var(--ink-dim);margin-bottom:.6rem;line-height:1.5">
-    In local mode your schedule is in <b>this browser only</b>. Nothing is on
-    the server, so if this browser's data is cleared there is no copy anywhere
-    and nobody can get it back. Keep one of these somewhere.
-  </div>
-  <div class="row" style="justify-content:flex-start;flex-wrap:wrap">
-    <button id="bkCopy">&#10697; Copy as text</button>
-    <button id="bkFile">&#10515; Download .txt</button>
-  </div>
-  <div style="font-size:.72rem;color:var(--ink-dim);margin:.2rem 0 .6rem">
-    Copy is usually the better one on a phone: paste it into Notes and it is
-    always findable. A downloaded file often is not.
-  </div>
-  <textarea id="bkText" readonly style="width:100%;height:9rem;font-size:.7rem;
-    font-family:ui-monospace,Menlo,monospace;background:var(--panel2);
-    color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:.5rem"></textarea>
-  <hr style="border:0;border-top:1px solid var(--line);margin:.9rem 0">
-  <h3 style="font-size:.9rem">Restore</h3>
-  <div style="font-size:.76rem;color:var(--ink-dim);margin-bottom:.5rem;line-height:1.5">
-    Paste a backup here (or pick a .txt) to replace what is in this browser.
-    <b>This overwrites</b> whatever is here now.
-  </div>
-  <textarea id="rsText" placeholder="Paste your backup text here"
-    style="width:100%;height:6rem;font-size:.7rem;
-    font-family:ui-monospace,Menlo,monospace;background:var(--panel2);
-    color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:.5rem"></textarea>
-  <div class="row" style="justify-content:flex-start;flex-wrap:wrap;margin-top:.5rem">
-    <button id="rsPaste" style="border-color:var(--accent);color:var(--accent)">Restore from text</button>
-    <button id="rsFileBtn">Pick a .txt&hellip;</button>
-    <input type="file" id="rsFile" accept=".txt,text/plain" style="display:none">
-  </div>
-  <div id="bkMsg" style="font-size:.72rem;color:var(--ink-dim);margin-top:.5rem"></div>
-  <div class="row" style="justify-content:flex-end;margin-top:.6rem">
-    <button id="bkClose">Close</button>
-  </div>
-</dialog>
 
 <dialog id="keepDlg">
   <h3>Your schedule lives in this browser</h3>
@@ -640,14 +602,16 @@
     </div>
   </div>
   <div class="row" style="justify-content:flex-start;flex-wrap:wrap">
-    <button id="keepBackup" style="border-color:var(--accent);color:var(--accent)">Back it up now</button>
+    <a id="keepBackup" class="btn" href="/local/edit#device"
+       style="border:1px solid var(--accent);color:var(--accent);padding:.45rem .7rem;border-radius:8px;text-decoration:none">
+       Back it up now</a>
   </div>
   <div class="row" style="justify-content:flex-end;margin-top:.8rem;flex-wrap:wrap">
     <button id="keepSnooze">Stop showing for 30 days</button>
     <button id="keepOk">Got it</button>
   </div>
   <div style="font-size:.68rem;color:var(--ink-dim);margin-top:.5rem">
-    You can turn this off for good in Settings.
+    You can turn this off for good in Edit my schedule, under <b>On this device</b>.
   </div>
 </dialog>
 
@@ -660,8 +624,8 @@
        border:1px solid var(--accent);border-radius:8px">
     <b>Do it before you type your schedule in.</b> A Home Screen app gets its
     own storage, separate from this browser's, so nothing you enter here
-    follows it across. If you have already entered one, copy it out with
-    <b>Backup</b> first and paste it back in over there.
+    follows it across. If you have already entered one, save it with
+    <b>Download (.txt)</b> in Edit my schedule first and load it in over there.
   </div>
   <div class="row" style="justify-content:flex-start;flex-wrap:wrap">
     <button id="addInstall" style="display:none;border-color:var(--accent);color:var(--accent)">
@@ -669,80 +633,17 @@
     <button id="addPersist">Ask this browser to protect the storage</button>
   </div>
   <div id="addPersistMsg" style="font-size:.72rem;color:var(--ink-dim);margin-top:.4rem"></div>
+  <div id="setStore" style="font-size:.72rem;color:var(--ink-dim);margin-top:.4rem"></div>
   <div class="row" style="justify-content:flex-end;margin-top:.8rem;flex-wrap:wrap">
     <button id="addNever">Don't show this again</button>
     <button id="addOk">Got it</button>
   </div>
   <div style="font-size:.68rem;color:var(--ink-dim);margin-top:.5rem">
     If you only ever use this in a browser tab and do not mind the risk, turn
-    it off. Settings can bring it back.
+    it off. Edit my schedule (On this device) can bring it back.
   </div>
 </dialog>
 
-<dialog id="setDlg">
-  <h3>Settings</h3>
-  <div id="setAcct" style="display:none">
-    <div class="row" style="align-items:flex-start">
-      <label style="min-width:auto">
-        <input type="checkbox" id="setOffline" style="width:auto;margin:0 .4rem 0 0">
-        Keep a copy on this device for when there is no internet
-      </label>
-    </div>
-    <div style="font-size:.72rem;color:var(--ink-dim);margin:.3rem 0 .5rem;line-height:1.5">
-      The app then opens offline with your schedule as it was last loaded, to
-      look at, not to change: changes need the internet. Only turn this on on
-      your own device, because anyone using this browser offline could see it.
-      Logging out deletes the copy and turns this off.
-    </div>
-    <div id="setOfflineState" style="font-size:.72rem;color:var(--ink-dim);margin-bottom:.8rem"></div>
-  </div>
-  <div id="setLocal">
-  <div class="row" style="align-items:flex-start">
-    <label style="min-width:auto">
-      <input type="checkbox" id="setRemind" style="width:auto;margin:0 .4rem 0 0">
-      Remind me once a day that this data is only in this browser
-    </label>
-  </div>
-  <div style="font-size:.72rem;color:var(--ink-dim);margin:.3rem 0 .8rem;line-height:1.5">
-    Off is fine as long as you have a backup somewhere. The reminder exists
-    because the one thing local mode cannot do is get your schedule back.
-  </div>
-  <div class="row" style="align-items:flex-start">
-    <label style="min-width:auto">
-      <input type="checkbox" id="setInstall" style="width:auto;margin:0 .4rem 0 0">
-      Remind me to install this as an app
-    </label>
-  </div>
-  <div style="font-size:.72rem;color:var(--ink-dim);margin:.3rem 0 .8rem;line-height:1.5">
-    <span id="setInstallWhy"></span>
-    <button id="setHow" style="margin-top:.4rem;width:auto;padding:.35rem .6rem;
-            font-size:.74rem">How do I install it?</button>
-  </div>
-  <hr style="border:0;border-top:1px solid var(--line);margin:.2rem 0 .7rem">
-  <div style="font-size:.78rem;line-height:1.6">
-    <b>Storage</b><br>
-    <span id="setStore" style="color:var(--ink-dim)">Checking&hellip;</span>
-  </div>
-  <hr style="border:0;border-top:1px solid var(--line);margin:.8rem 0 .7rem">
-  <div style="font-size:.78rem;line-height:1.6">
-    <b>Want an account instead?</b>
-    <div style="font-size:.72rem;color:var(--ink-dim);margin-top:.25rem">
-      An account puts your schedule on every device and can get it back if this
-      browser is cleared. It is <b>not</b> a switch: the two keep separate
-      copies, so back this one up first with <b>&#9921; Backup</b> and paste it
-      in over there.
-      <a href="/?choose=1" style="color:var(--accent)">Compare the two</a>.
-    </div>
-    <div style="font-size:.72rem;color:var(--ink-dim);margin-top:.5rem">
-      While there is a schedule in this browser the front page opens local mode
-      directly, so that link is how you get back to the choice.
-    </div>
-  </div>
-  </div>
-  <div class="row" style="justify-content:flex-end">
-    <button id="setClose">Close</button>
-  </div>
-</dialog>
 
 <dialog id="icsDlg">
   <h3>Download as a calendar file</h3>
@@ -2914,7 +2815,7 @@ async function init(){
             +"View only until you are back online.";}
       }
     }catch(e){}
-    wireAcctOffline();
+
   }
   if(SAMPLE){
     /* Static mode normally waits for someone to be picked from the student
@@ -3200,6 +3101,7 @@ function openInstall(){
   document.getElementById("addInstall").style.display =
     deferredInstall ? "" : "none";
   document.getElementById("addPersistMsg").textContent = "";
+  paintStorage();
   const dlg = document.getElementById("addDlg");
   /* Esc closes a modal, and a nudge that reappears on every reload because
      somebody pressed Esc is a nudge people learn to hate. Any close counts as
@@ -3258,73 +3160,15 @@ function maybeRemind(){
   document.getElementById("keepDlg").showModal();
 }
 
-function openBackup(){
-  document.getElementById("bkText").value = localText();
-  document.getElementById("bkMsg").textContent = "";
-  document.getElementById("rsText").value = "";
-  document.getElementById("backupDlg").showModal();
-}
-function bkSay(msg){ document.getElementById("bkMsg").textContent = msg; }
 
+/* Backup, restore and the settings that used to live behind a gear button
+   are in Edit my schedule now ("On this device"): one place for everything
+   about your data, and a toolbar that is only about looking at it. */
 function wireLocalUI(){
   if(!LOCAL) return;
-  document.getElementById("bkBtn").style.display = "";
-  document.getElementById("setBtn").style.display = "";
-  document.getElementById("bkBtn").onclick = openBackup;
-  document.getElementById("bkClose").onclick = () =>
-    document.getElementById("backupDlg").close();
-
-  document.getElementById("bkCopy").onclick = async () => {
-    const t = document.getElementById("bkText");
-    try{
-      await navigator.clipboard.writeText(t.value);
-      bkSay("Copied. Paste it into Notes, or anywhere you will find it again.");
-    }catch(e){
-      // clipboard is blocked in some contexts; selecting it is the fallback
-      t.focus(); t.select();
-      bkSay("Couldn't copy for you \u2014 it is selected, so copy it by hand.");
-    }
-  };
-  document.getElementById("bkFile").onclick = () => {
-    const blob = new Blob([localText()], {type:"text/plain;charset=utf-8"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `smart-schedule-backup-${dkey(pittNow())}.txt`;
-    document.body.appendChild(a); a.click();
-    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    bkSay("Downloaded.");
-  };
-
-  async function restore(text){
-    if(!text || text.trim().length < 3){ bkSay("There is nothing in that."); return; }
-    const parsed = parseStudent(text);
-    const classes = Object.keys(parsed.classes||{}).length
-      + (parsed.terms||[]).reduce((n,t)=>n+Object.keys(t.classes||{}).length, 0);
-    if(!parsed.name && !classes && !(parsed.events||[]).length){
-      bkSay("That does not look like a Smart Schedule backup, so nothing was "
-            + "changed."); return;
-    }
-    if(localText().trim() && !confirm(
-        "Replace the schedule in this browser with the one you pasted?\n\n"
-        + "What is here now will be gone."))
-      return;
-    if(!localSave(text)) return;
-    await reloadMine();
-    bkSay("Restored.");
-    setStatus("Restored from your backup.");
-  }
-  document.getElementById("rsPaste").onclick = () =>
-    restore(document.getElementById("rsText").value);
-  document.getElementById("rsFileBtn").onclick = () =>
-    document.getElementById("rsFile").click();
-  document.getElementById("rsFile").onchange = ev => {
-    const f = ev.target.files[0]; if(!f) return;
-    const r = new FileReader();
-    r.onload = () => { document.getElementById("rsText").value = r.result;
-                       restore(r.result); };
-    r.readAsText(f);
-    ev.target.value = "";
-  };
+  // /local/app#install (from the editor's "How do I install it?")
+  if(location.hash === "#install") setTimeout(openInstall, 300);
+  addEventListener("hashchange", () => { if(location.hash === "#install") openInstall(); });
 
   // the reminder's buttons
   const keep = document.getElementById("keepDlg");
@@ -3332,9 +3176,8 @@ function wireLocalUI(){
   document.getElementById("keepSnooze").onclick = () => {
     const d = pittNow(); d.setDate(d.getDate() + 30);
     lsSet(LS_SNOOZE, dkey(d)); keep.close();
-    setStatus("Reminder off for 30 days. Settings has a permanent switch.");
+    setStatus("Reminder off for 30 days. Edit my schedule has a permanent switch.");
   };
-  document.getElementById("keepBackup").onclick = () => { keep.close(); openBackup(); };
   document.getElementById("keepInstall").onclick = () => { keep.close(); openInstall(); };
 
   // the install nudge's buttons
@@ -3348,7 +3191,7 @@ function wireLocalUI(){
   };
   document.getElementById("addNever").onclick = () => {
     lsSet(LS_ADD, "off"); add.close();
-    setStatus("Install reminder off. Settings can turn it back on.");
+    setStatus("Install reminder off. Edit my schedule can turn it back on.");
   };
   document.getElementById("addInstall").onclick = async () => {
     if(!deferredInstall) return;
@@ -3359,32 +3202,6 @@ function wireLocalUI(){
   document.getElementById("addPersist").onclick = () =>
     askPersist(m => { document.getElementById("addPersistMsg").textContent = m;
                       paintStorage(); });
-
-  // settings
-  const setDlg = document.getElementById("setDlg");
-  const rem = document.getElementById("setRemind");
-  const ins = document.getElementById("setInstall");
-  document.getElementById("setBtn").onclick = () => {
-    rem.checked = lsGet(LS_REMIND) !== "off";
-    ins.checked = lsGet(LS_ADD) !== "off";
-    document.getElementById("setInstallWhy").textContent = installInfo().timed
-      ? "Worth leaving on here: this browser clears a site's storage after "
-        + "seven days of not opening it, and an installed app is exempt."
-      : "Nothing on this browser deletes your schedule on a timer, so this one "
-        + "is a nicety rather than a rescue.";
-    paintStorage();
-    setDlg.showModal();
-  };
-  ins.onchange = () => {
-    lsSet(LS_ADD, ins.checked ? "on" : "off");
-    if(ins.checked) lsSet(LS_ADD_UNTIL, "");
-  };
-  document.getElementById("setHow").onclick = () => { setDlg.close(); openInstall(); };
-  rem.onchange = () => {
-    lsSet(LS_REMIND, rem.checked ? "on" : "off");
-    if(rem.checked) lsSet(LS_SNOOZE, "");
-  };
-  document.getElementById("setClose").onclick = () => setDlg.close();
 }
 
 /* ---- .ics export -------------------------------------------------------
@@ -4278,6 +4095,17 @@ function noteProblem(p){
   return null;
 }
 function localApi(path,p){
+  if(path==="/api/pref"){
+    // same whitelist and same line rule as set_pref_line() in app.py
+    if(p.key!=="time_format"||!["12h","24h"].includes(p.value))
+      return {status:400, body:{error:"Not a setting this can change."}};
+    const ls=localText().replace(/\r\n/g,"\n").split("\n"), out=[];
+    const re=/^\s*@pref\s+time_format\s*=/; let done=false;
+    ls.forEach(l=>{ if(re.test(l)){ if(!done){out.push(`@pref time_format = ${p.value}`);done=true;} } else out.push(l); });
+    if(!done){ while(out.length&&!out[out.length-1].trim())out.pop(); out.push(`@pref time_format = ${p.value}`,""); }
+    if(!localSave(out.join("\n"))) return {status:500,body:{error:"Could not save."}};
+    return {status:200, body:{ok:true, key:p.key, value:p.value}};
+  }
   const prefix = p.kind==="hw" ? "@hw" : "@event";
   const cap = p.kind==="hw" ? CAPS.hw : CAPS.events;
   let lines = localText().replace(/\r\n/g,"\n").split("\n");
@@ -4568,7 +4396,39 @@ document.getElementById("gbody").addEventListener("dblclick",e=>{
 if("serviceWorker" in navigator)
   window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));
 
-/* Account mode offline, opt-in per device (Settings). The switch IS the
+/* Toolbar style, per device: "segmented" (default, every option visible) or
+   "compact" (one button per switch; a click steps to the next option). The
+   buttons and their handlers are the same either way: compact only hides the
+   ones not selected and turns a click on the selected one into a click on the
+   next, so nothing about switching views exists twice. */
+const TB_KEY="ssa-toolbar";
+function tbCompact(){ try{return localStorage.getItem(TB_KEY)==="compact";}catch(e){return false;} }
+document.documentElement.classList.toggle("tb-compact",tbCompact());
+document.querySelectorAll(".toolbar .seg").forEach(seg=>{
+  seg.addEventListener("click",e=>{
+    if(!document.documentElement.classList.contains("tb-compact"))return;
+    const b=e.target.closest("button");
+    if(!b||!b.classList.contains("on"))return;
+    const all=Array.from(seg.querySelectorAll("button"))
+      .filter(x=>getComputedStyle(x).visibility!=="hidden");
+    const next=all[(all.indexOf(b)+1)%all.length];
+    if(next===b)return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    next.click();
+  },true);
+});
+function tbTitles(){
+  document.querySelectorAll(".toolbar .seg").forEach(seg=>{
+    const bs=Array.from(seg.querySelectorAll("button"));
+    bs.forEach((b,i)=>{ if(b.dataset.title0===undefined)b.dataset.title0=b.title||"";
+      b.title=document.documentElement.classList.contains("tb-compact")
+        ?`Switch to ${bs[(i+1)%bs.length].textContent.trim()}`:b.dataset.title0; });
+  });
+}
+tbTitles();
+
+/* Account mode offline, opt-in per device (Edit my schedule, On this
+   device -- that page turns it on and off). The switch IS the
    cache ssa-acct-v1: sw.js only keeps account copies while it exists, so
    off / log out = caches.delete, and every copy of the schedule goes with it.
    A marker entry records whose copy it is, so a different account logging in
@@ -4583,45 +4443,6 @@ async function acctOfflineOwnerCheck(){
     const owner=m?await m.text():"";
     if(owner!==ME_EMAIL) await caches.delete(ACCT_CACHE);
   }catch(e){}
-}
-async function acctOfflineSet(on){
-  if(!("caches" in window))return false;
-  if(!on){ await caches.delete(ACCT_CACHE); return true; }
-  const c=await caches.open(ACCT_CACHE);          // this is "on"
-  await c.put(OWNER_KEY,new Response(ME_EMAIL));
-  if("serviceWorker" in navigator){
-    const reg=await navigator.serviceWorker.ready;
-    if(reg.active) reg.active.postMessage({type:"warm-acct",
-      urls:["/app",PATHS.me,PATHS.shared,"/manifest.webmanifest"].concat(YEARS.map(y=>PATHS.cal(y.id)))});
-  }
-  return true;
-}
-async function paintAcctOffline(){
-  const st=document.getElementById("setOfflineState");
-  if(!(await acctOfflineOn())){st.textContent="Off. Nothing of yours is kept on this device.";return;}
-  try{
-    const m=await (await caches.open(ACCT_CACHE)).match(PATHS.me);
-    const sv=m&&m.headers.get("X-SSA-Saved");
-    if(sv){const d=new Date(sv);
-      st.textContent=`On. Copy saved ${MON[d.getMonth()]} ${d.getDate()}, ${fmtTime(d.getHours()*60+d.getMinutes(),IS12)}; it refreshes every time you open the app online.`;}
-    else st.textContent="On. Saving a copy\u2026";
-  }catch(e){st.textContent="On.";}
-}
-function wireAcctOffline(){
-  if(!BACKEND)return;
-  const sb=document.getElementById("setBtn"), dlg=document.getElementById("setDlg");
-  const cb=document.getElementById("setOffline");
-  if(!("caches" in window)||!("serviceWorker" in navigator))return;   // nothing to offer
-  sb.style.display="";
-  document.getElementById("setAcct").style.display="";
-  document.getElementById("setLocal").style.display="none";
-  sb.onclick=async()=>{ cb.checked=await acctOfflineOn(); await paintAcctOffline(); dlg.showModal(); };
-  cb.onchange=async()=>{
-    cb.disabled=true;
-    await acctOfflineSet(cb.checked);
-    setTimeout(async()=>{ await paintAcctOffline(); cb.disabled=false; },700);
-  };
-  document.getElementById("setClose").onclick=()=>dlg.close();
 }
 
 /* Local mode offline: ask sw.js to save everything this mode needs -- both
@@ -4670,7 +4491,19 @@ addEventListener("keydown",e=>{
   if(e.key==="Escape"&&ZOOM&&!document.querySelector("dialog[open]")){ZOOM=false;render();}
 });
 document.getElementById("todayBtn").onclick=async()=>{const y=yearForDate(pittNow());if(y){await loadYear(y);document.getElementById("yearSel").value=y.id;}pickDefaultWeek();monthRef=new Date(pittNow());listFrom=null;ZOOM=false;render();};
-document.querySelectorAll("#fmtSeg button").forEach(b=>b.onclick=()=>{IS12=(b.dataset.f==="12h");syncFmtSeg();fillQTimes();render();tickClock();});
+/* Saved as "@pref time_format" -- the one place the setting lives, so it
+   sticks and follows the student to every device. (It used to change the
+   view only, and the next load put the file's value back.) */
+document.querySelectorAll("#fmtSeg button").forEach(b=>b.onclick=async()=>{
+  const want=(b.dataset.f==="12h");
+  if(want===IS12)return;
+  IS12=want;syncFmtSeg();fillQTimes();render();tickClock();
+  if(!STU||!(BACKEND||LOCAL))return;
+  const v=IS12?"12h":"24h";
+  const {body}=await api("/api/pref",{key:"time_format",value:v});
+  if(body&&body.ok){STU.pref=STU.pref||{};STU.pref.time_format=v;}
+  else setStatus((body&&body.error)||"Couldn't save that; it is only changed on this screen.");
+});
 function syncViewSeg(){
   document.querySelectorAll("#viewSeg button").forEach(b=>
     b.classList.toggle("on",b.dataset.v===VIEW));
