@@ -681,6 +681,22 @@
 
 <dialog id="setDlg">
   <h3>Settings</h3>
+  <div id="setAcct" style="display:none">
+    <div class="row" style="align-items:flex-start">
+      <label style="min-width:auto">
+        <input type="checkbox" id="setOffline" style="width:auto;margin:0 .4rem 0 0">
+        Keep a copy on this device for when there is no internet
+      </label>
+    </div>
+    <div style="font-size:.72rem;color:var(--ink-dim);margin:.3rem 0 .5rem;line-height:1.5">
+      The app then opens offline with your schedule as it was last loaded, to
+      look at, not to change: changes need the internet. Only turn this on on
+      your own device, because anyone using this browser offline could see it.
+      Logging out deletes the copy and turns this off.
+    </div>
+    <div id="setOfflineState" style="font-size:.72rem;color:var(--ink-dim);margin-bottom:.8rem"></div>
+  </div>
+  <div id="setLocal">
   <div class="row" style="align-items:flex-start">
     <label style="min-width:auto">
       <input type="checkbox" id="setRemind" style="width:auto;margin:0 .4rem 0 0">
@@ -721,6 +737,7 @@
       While there is a schedule in this browser the front page opens local mode
       directly, so that link is how you get back to the choice.
     </div>
+  </div>
   </div>
   <div class="row" style="justify-content:flex-end">
     <button id="setClose">Close</button>
@@ -2882,11 +2899,22 @@ async function init(){
   // In backend mode, auto-load the logged-in user's own schedule.
   if(BACKEND){
     const nav=document.getElementById("acctNav"); if(nav)nav.style.display="flex";
-    try{const mr=await fetch("/api/me",{cache:"no-store"});if(mr.ok){const me=await mr.json();if(me.is_admin){const al=document.getElementById("adminLink");if(al)al.style.display="inline";}}}catch(e){}
+    try{const mr=await fetch("/api/me",{cache:"no-store"});if(mr.ok){const me=await mr.json();ME_EMAIL=me.email||"";if(me.is_admin){const al=document.getElementById("adminLink");if(al)al.style.display="inline";}}}catch(e){}
+    await acctOfflineOwnerCheck();
     try{
       const r=await fetch(PATHS.me,{cache:"no-store"});
-      if(r.ok){const t=await r.text(); if(t&&t.trim().length>3){STU=parseStudent(t);mergeSchool();}}
+      if(r.ok){const t=await r.text(); if(t&&t.trim().length>3){STU=parseStudent(t);mergeSchool();}
+        /* The copy sw.js kept (Settings > offline): say so, and that it is
+           for looking at -- an edit made now cannot reach the server. */
+        const sv=r.headers.get("X-SSA-Saved");
+        if(sv){const d=new Date(sv);
+          OFFLINE_VIEW=true;
+          document.getElementById("status").textContent=
+            `Offline \u00b7 your schedule as of ${MON[d.getMonth()]} ${d.getDate()}, ${fmtTime(d.getHours()*60+d.getMinutes(),IS12)}. `
+            +"View only until you are back online.";}
+      }
     }catch(e){}
+    wireAcctOffline();
   }
   if(SAMPLE){
     /* Static mode normally waits for someone to be picked from the student
@@ -4211,9 +4239,15 @@ function quickLine(){
    which is why local mode did not need a second copy of the app. */
 async function api(path,payload){
   if(!LOCAL){
-    const r=await fetch(path,{method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(payload)});
+    let r;
+    try{
+      r=await fetch(path,{method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(payload)});
+    }catch(e){
+      // offline (or the server is unreachable): nothing was saved, say why
+      return {status:0, body:{error:"No internet, so nothing was saved. Try again when you are back online."}};
+    }
     return {status:r.status, body:await r.json().catch(()=>({}))};
   }
   return localApi(path,payload);
@@ -4533,6 +4567,62 @@ document.getElementById("gbody").addEventListener("dblclick",e=>{
    sw.js. Failure is not worth reporting: the site works fine without it. */
 if("serviceWorker" in navigator)
   window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));
+
+/* Account mode offline, opt-in per device (Settings). The switch IS the
+   cache ssa-acct-v1: sw.js only keeps account copies while it exists, so
+   off / log out = caches.delete, and every copy of the schedule goes with it.
+   A marker entry records whose copy it is, so a different account logging in
+   on the same browser never sees the last one's schedule offline. */
+const ACCT_CACHE="ssa-acct-v1", OWNER_KEY="/__ssa-owner";
+let ME_EMAIL="", OFFLINE_VIEW=false;
+async function acctOfflineOn(){ try{return "caches" in window && await caches.has(ACCT_CACHE);}catch(e){return false;} }
+async function acctOfflineOwnerCheck(){
+  if(!BACKEND||!ME_EMAIL||!(await acctOfflineOn()))return;
+  try{
+    const c=await caches.open(ACCT_CACHE), m=await c.match(OWNER_KEY);
+    const owner=m?await m.text():"";
+    if(owner!==ME_EMAIL) await caches.delete(ACCT_CACHE);
+  }catch(e){}
+}
+async function acctOfflineSet(on){
+  if(!("caches" in window))return false;
+  if(!on){ await caches.delete(ACCT_CACHE); return true; }
+  const c=await caches.open(ACCT_CACHE);          // this is "on"
+  await c.put(OWNER_KEY,new Response(ME_EMAIL));
+  if("serviceWorker" in navigator){
+    const reg=await navigator.serviceWorker.ready;
+    if(reg.active) reg.active.postMessage({type:"warm-acct",
+      urls:["/app",PATHS.me,PATHS.shared,"/manifest.webmanifest"].concat(YEARS.map(y=>PATHS.cal(y.id)))});
+  }
+  return true;
+}
+async function paintAcctOffline(){
+  const st=document.getElementById("setOfflineState");
+  if(!(await acctOfflineOn())){st.textContent="Off. Nothing of yours is kept on this device.";return;}
+  try{
+    const m=await (await caches.open(ACCT_CACHE)).match(PATHS.me);
+    const sv=m&&m.headers.get("X-SSA-Saved");
+    if(sv){const d=new Date(sv);
+      st.textContent=`On. Copy saved ${MON[d.getMonth()]} ${d.getDate()}, ${fmtTime(d.getHours()*60+d.getMinutes(),IS12)}; it refreshes every time you open the app online.`;}
+    else st.textContent="On. Saving a copy\u2026";
+  }catch(e){st.textContent="On.";}
+}
+function wireAcctOffline(){
+  if(!BACKEND)return;
+  const sb=document.getElementById("setBtn"), dlg=document.getElementById("setDlg");
+  const cb=document.getElementById("setOffline");
+  if(!("caches" in window)||!("serviceWorker" in navigator))return;   // nothing to offer
+  sb.style.display="";
+  document.getElementById("setAcct").style.display="";
+  document.getElementById("setLocal").style.display="none";
+  sb.onclick=async()=>{ cb.checked=await acctOfflineOn(); await paintAcctOffline(); dlg.showModal(); };
+  cb.onchange=async()=>{
+    cb.disabled=true;
+    await acctOfflineSet(cb.checked);
+    setTimeout(async()=>{ await paintAcctOffline(); cb.disabled=false; },700);
+  };
+  document.getElementById("setClose").onclick=()=>dlg.close();
+}
 
 /* Local mode offline: ask sw.js to save everything this mode needs -- both
    pages and every school year's calendar -- not only what this visit happened

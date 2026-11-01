@@ -196,6 +196,128 @@ try:
            f"using the account app saves nothing of it ({[p for p in cached if not p.startswith('/local')]})")
         ck(_app.MAX_EVENTS == 200, f"and the account cap is still {_app.MAX_EVENTS}")
 
+        # ---------------- account mode: offline copy, opt-in per device ----------------
+        ACCT = "ssa-acct-v1"
+        has_acct = lambda pg_: pg_.evaluate(f"caches.has('{ACCT}')")
+        acct_keys = lambda pg_: pg_.evaluate(f"""() => caches.open('{ACCT}').then(c => c.keys())
+            .then(ks => ks.map(r => new URL(r.url).pathname))""")
+        ap.on("pageerror", lambda e: errs.append(str(e)))
+        ap.goto(BASE + "/edit")
+        ap.click("#modeText")
+        ap.fill("#rawText", SEED)
+        with ap.expect_navigation():
+            ap.click('button[type=submit]')
+        ap.goto(BASE + "/app")
+        ap.wait_for_selector("#gbody .col", timeout=8000)
+        ap.wait_for_timeout(500)
+        ck(ap.is_visible("#setBtn"), "the account app has a settings button now")
+        ap.click("#setBtn")
+        ap.wait_for_timeout(300)
+        ck(ap.is_visible("#setOffline") and not ap.is_visible("#setRemind"),
+           "its settings show the offline switch, not local mode's backup reminders")
+        ck(not ap.is_checked("#setOffline") and "Off" in (ap.text_content("#setOfflineState") or ""),
+           "the switch is OFF by default")
+        ck(not has_acct(ap), "...and nothing of the account is kept")
+        ap.click("#setClose")
+        ctx.set_offline(True)
+        try:
+            ap.reload(timeout=6000)
+            off_ok = ap.locator("#gbody .col").count() > 0
+        except Exception:
+            off_ok = False
+        ck(not off_ok, "switch off: the account app does not open offline (as before)")
+        ctx.set_offline(False)
+        ap.goto(BASE + "/app")
+        ap.wait_for_selector("#gbody .col", timeout=8000)
+        ap.wait_for_timeout(400)
+
+        # turn it on
+        ap.click("#setBtn")
+        ap.wait_for_timeout(200)
+        ap.check("#setOffline")
+        keys = []
+        for _ in range(40):
+            keys = acct_keys(ap)
+            if {"/app", "/api/my-schedule", "/api/calendar/2026-2027", "/api/schedule-shared"} <= set(keys):
+                break
+            ap.wait_for_timeout(250)
+        ck({"/app", "/api/my-schedule", "/api/calendar/2026-2027", "/api/schedule-shared"} <= set(keys),
+           f"switch on: the app, my schedule and the school's data are saved ({sorted(keys)})")
+        ap.wait_for_timeout(800)
+        ck("On." in (ap.text_content("#setOfflineState") or ""), f"and it says so ({ap.text_content('#setOfflineState')!r})")
+        ap.click("#setClose")
+
+        ctx.set_offline(True)
+        ap.reload()
+        ap.wait_for_selector("#gbody .col", timeout=8000)
+        ap.wait_for_timeout(400)
+        ck(ap.locator("#gbody .block", has_text="Dentist").count() > 0 and ap.evaluate(THU) == "Day 7",
+           "offline: the account app opens with my schedule and the right cycle day")
+        st = ap.text_content("#status") or ""
+        ck("your schedule as of" in st and "View only" in st, f"it says it is a saved copy, view only ({st!r})")
+        r = ap.evaluate("api('/api/quick-add',{kind:'event',line:'2026-10-30 - Offline try - 12:00-12:30 - gray'})")
+        ck(r["status"] == 0 and "No internet" in r["body"].get("error", ""),
+           f"an edit offline says nothing was saved, instead of throwing ({r})")
+        ctx.set_offline(False)
+
+        # an expired login must not become "your schedule, offline"
+        ctx.clear_cookies()
+        ap.goto(BASE + "/app")
+        ap.wait_for_timeout(800)
+        # the data request is the one that FOLLOWS the redirect (navigations do not)
+        ap.evaluate("fetch('/api/my-schedule', {cache: 'no-store'}).then(r => r.text())")
+        ap.wait_for_timeout(500)
+        app_copy = ap.evaluate(f"caches.open('{ACCT}').then(c => c.match('/app')).then(r => r ? r.text() : '')")
+        sch_copy = ap.evaluate(f"caches.open('{ACCT}').then(c => c.match('/api/my-schedule')).then(r => r ? r.text() : '')")
+        ck('id="gbody"' in app_copy and "Dentist" in sch_copy,
+           "a login redirect (expired session) does not overwrite the saved copy with the login page")
+
+        # someone else logs in on this browser: the copy is not theirs to see
+        ap.goto(BASE + "/register")
+        ap.fill('input[name=email]', "27roee@shadysideacademy.org")
+        ap.fill('input[name=name]', "Rae Roe")
+        ap.fill('input[name=password]', "pw123456")
+        ap.click('button[type=submit]')
+        ap.fill('input[name=email]', "27roee@shadysideacademy.org")
+        ap.fill('input[name=password]', "pw123456")
+        ap.click('button[type=submit]')
+        ap.wait_for_load_state()
+        ap.goto(BASE + "/app")
+        ap.wait_for_timeout(1500)
+        ck(not has_acct(ap), "a different account logging in on this browser deletes the last one's copy")
+
+        # log back in as Jane, switch on, then log out
+        ap.goto(BASE + "/logout")
+        ap.goto(BASE + "/login")
+        ap.fill('input[name=email]', "27doej@shadysideacademy.org")
+        ap.fill('input[name=password]', "pw123456")
+        ap.click('button[type=submit]')
+        ap.wait_for_load_state()
+        ap.goto(BASE + "/app")
+        ap.wait_for_selector("#gbody .col", timeout=8000)
+        ap.wait_for_timeout(400)
+        ap.click("#setBtn"); ap.wait_for_timeout(200)
+        ap.check("#setOffline"); ap.wait_for_timeout(1000)
+        ap.click("#setClose")
+        ck(has_acct(ap), "(on again)")
+        ap.goto(BASE + "/logout")
+        ap.wait_for_timeout(500)
+        ck(not has_acct(ap), "logging out deletes the copy and turns the switch off")
+        ap.goto(BASE + "/login")
+        ap.fill('input[name=email]', "27doej@shadysideacademy.org")
+        ap.fill('input[name=password]', "pw123456")
+        ap.click('button[type=submit]')
+        ap.wait_for_load_state()
+        ap.goto(BASE + "/app")
+        ap.wait_for_selector("#gbody .col", timeout=8000)
+        ap.wait_for_timeout(400)
+        ap.click("#setBtn"); ap.wait_for_timeout(200)
+        ap.check("#setOffline"); ap.wait_for_timeout(1000)
+        ap.uncheck("#setOffline"); ap.wait_for_timeout(1000)
+        ck(not has_acct(ap) and "Off" in (ap.text_content("#setOfflineState") or ""),
+           "switching it off deletes the copy straight away")
+        ap.click("#setClose")
+
         ck(not errs, f"no page errors: {errs}")
         b.close()
 except ImportError:
