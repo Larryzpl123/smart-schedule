@@ -472,7 +472,7 @@
   <!-- In the middle gap. It was empty, and a search box on a second row next
        to the 12h/24h switch reads as a layout fault. -->
   <div class="spacer"></div>
-  <input id="find" style="display:none" placeholder="Search  /"
+  <input id="find" style="display:none" placeholder="Search  /" autocomplete="off"
          title="Search everything you have, all year. Press / from anywhere.">
   <div class="spacer"></div>
   <button id="icsBtn" title="Download this year as a calendar file (.ics)"
@@ -533,7 +533,7 @@
 <dialog id="quickDlg">
   <h3 id="qTitle">Add</h3>
   <div class="row"><label id="qWhatLbl">What</label>
-    <input id="qName" placeholder="Meet Mr. B" style="flex:1"></div>
+    <input id="qName" placeholder="Meet Mr. B" autocomplete="off" style="flex:1"></div>
   <div class="row" id="qModeRow"><label>Repeats</label>
     <select id="qMode" style="flex:1">
       <option value="once">Once</option>
@@ -554,7 +554,7 @@
   <div class="row" id="qTimeRow"><label>Time</label>
     <select id="qStart" style="flex:1"></select>
     <span style="font-size:.72rem;color:var(--ink-dim)">for</span>
-    <input id="qDur" type="number" min="5" max="600" step="5" value="30" style="width:6.6rem">
+    <input id="qDur" type="number" min="5" max="600" step="1" value="30" style="width:6.6rem">
     <span style="font-size:.72rem;color:var(--ink-dim)">min</span></div>
   <div class="row" id="qRangeRow" style="display:none"><label>Only between</label>
     <input type="date" id="qFrom" style="flex:1">
@@ -572,7 +572,7 @@
     <span id="qDate" style="font-size:.8rem"></span>
     <input type="date" id="qDateIn" style="flex:1;display:none"></div>
   <div class="row" id="qNoteRow" style="align-items:flex-start"><label>Notes</label>
-    <textarea id="qNote" rows="3" maxlength="2000" placeholder="Optional: page numbers, what to bring, links&hellip;"
+    <textarea id="qNote" rows="3" maxlength="2000" autocomplete="off" placeholder="Optional: page numbers, what to bring, links&hellip;"
       style="flex:1;resize:vertical;cursor:text;line-height:1.4"></textarea></div>
   <div id="qRepeat" style="font-size:.72rem;color:var(--ink-dim);margin-bottom:.5rem;display:none"></div>
   <div id="qMsg" style="font-size:.72rem;color:#ff6b6b;margin-bottom:.5rem"></div>
@@ -3832,11 +3832,15 @@ const QCOLORS=["gray","pink","cyan","teal","indigo","orange","red","green","blue
 /* The OPTION VALUES stay 24-hour, always: they are what gets written into the
    @event line. Only the labels follow the 12h/24h switch, so nothing about
    the stored format depends on what the reader happens to be looking at. */
-function fillQTimes(){
+/* extra: a time off the 5-minute grid (an event at 16:03) gets an option of
+   its own, so editing it does not silently move it to the first option. */
+function fillQTimes(extra){
   const st=document.getElementById("qStart");
-  const keep=st.value;
+  const keep=extra||st.value;
   st.innerHTML="";
-  QTIMES.forEach(t=>{
+  const ts=QTIMES.slice();
+  if(keep&&/^\d{2}:\d{2}$/.test(keep)&&!ts.includes(keep)){ts.push(keep);ts.sort();}
+  ts.forEach(t=>{
     const o=document.createElement("option");
     o.value=t; o.textContent=IS12?fmtTime(toMin(t),true):t;
     st.appendChild(o);
@@ -3949,8 +3953,9 @@ function openEdit(kind,src){
   } else {
     document.getElementById("qAllDay").checked=!!parsed.allday;
     syncAllDay();
-    document.getElementById("qStart").value=
-      QTIMES.includes(parsed.start)?parsed.start:QTIMES[0];
+    const ps=(parsed.start||"").padStart(5,"0");
+    fillQTimes(ps);
+    document.getElementById("qStart").value=ps;
     document.getElementById("qDur").value=
       String(Math.max(5,toMin(parsed.end)-toMin(parsed.start)));
     document.getElementById("qColor").value=parsed.color;

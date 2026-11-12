@@ -78,7 +78,9 @@
 <div id="pdfWarn" class="flash error" style="display:none;margin-bottom:1rem;font-size:.75rem;line-height:1.6"></div>
 <div id="pdfNote" style="display:none;margin-bottom:1rem;font-size:.75rem;line-height:1.6;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.7rem;color:var(--ink-dim)"></div>
 
-<form method="post" id="schedForm">
+<!-- autocomplete off: the browser's history dropdown ("Foosball Email",
+     "NYU"...) over every name box is noise here -- each one is a new thing. -->
+<form method="post" id="schedForm" autocomplete="off">
   <input type="hidden" name="schedule_text" id="schedule_text">
 
   <div id="formPane">
@@ -488,16 +490,25 @@ function fmt12(t){
   const ap=h>=12?"PM":"AM"; let hh=h%12; if(hh===0)hh=12;
   return `${hh}:${String(m).padStart(2,"0")} ${ap}`;
 }
-function timeOpts(){
+/* The pickers step by 5 minutes, but an event made by double-clicking the
+   grid, or typed in Text mode, can start at 16:03. Such a time gets an option
+   of its own, in order -- otherwise the select fell back to its first option
+   and a Form save quietly moved the event to 06:00. */
+function timeOpts(extra){
   const is12=(document.getElementById("f_timefmt")||{}).value!=="24h";
-  return TIMES.map(t=>[t,is12?fmt12(t):t]);
+  const ts=TIMES.slice();
+  (Array.isArray(extra)?extra:[extra]).forEach(v=>{
+    if(v&&/^\d{1,2}:\d{2}$/.test(v)){const t=v.padStart(5,"0");if(!ts.includes(t))ts.push(t);}
+  });
+  ts.sort();
+  return ts.map(t=>[t,is12?fmt12(t):t]);
 }
 function relabelTimes(){
   const opts=timeOpts();
   document.querySelectorAll(".ev_start,.sp_start,.sp_end").forEach(sel=>{
     const keep=sel.value;
     sel.innerHTML="";
-    opts.forEach(([v,l])=>{const o=document.createElement("option");
+    timeOpts(keep).forEach(([v,l])=>{const o=document.createElement("option");
       o.value=v;o.textContent=l;sel.appendChild(o);});
     if(keep)sel.value=keep;
   });
@@ -512,6 +523,7 @@ function mkSel(opts,val,w){
 }
 function mkInput(val,ph,flex){
   const el=document.createElement("input");
+  el.autocomplete="off";
   el.value=val||"";el.placeholder=ph||"";
   el.style.cssText="font-size:.74rem;padding:.35rem;"+(flex?"flex:1 1 8rem;min-width:6rem":"width:auto");
   return el;
@@ -622,13 +634,15 @@ function eventRow(line){
   mode.onchange=()=>{drawWhen();checkCaps();};
   drawWhen();
   const name=mkInput(ev.name,"What is it?",true);name.className="ev_name";
-  const start=mkSel(timeOpts(),ev.start,"6.6rem");start.className="ev_start";
+  const start=mkSel(timeOpts(ev.start),ev.start&&ev.start.padStart(5,"0"),"6.6rem");start.className="ev_start";
   /* A dropdown of round numbers could not express 80 minutes, or 35, or
      anything else somebody's actual commitment happens to run for. Typed in,
      with the common lengths still one click away in the datalist. */
   const durMin=Math.max(5,toMinutes(ev.end)-toMinutes(ev.start));
   const dur=document.createElement("input");
-  dur.type="number";dur.min="5";dur.max="600";dur.step="5";dur.value=String(durMin);
+  /* step 1, not 5: with step 5 a 32-minute event was "invalid", and the
+     browser silently refused to submit the whole form -- Save did nothing. */
+  dur.type="number";dur.min="5";dur.max="600";dur.step="1";dur.value=String(durMin);
   dur.className="ev_dur";dur.setAttribute("list","durList");
   dur.title="Minutes. Anything from 5 to 600.";
   // three digits plus the spinner arrows: 4.6rem cut the last one off
@@ -757,8 +771,8 @@ function sportRow(line){
     cb.style.cssText="width:auto;margin:0;cursor:pointer";
     lab.appendChild(cb);lab.appendChild(document.createTextNode(d));days.appendChild(lab);
   });
-  const start=mkSel(timeOpts(),sp.start,"6.6rem");start.className="sp_start";
-  const end=mkSel(timeOpts(),sp.end,"6.6rem");end.className="sp_end";
+  const start=mkSel(timeOpts(sp.start),sp.start&&sp.start.padStart(5,"0"),"6.6rem");start.className="sp_start";
+  const end=mkSel(timeOpts(sp.end),sp.end&&sp.end.padStart(5,"0"),"6.6rem");end.className="sp_end";
   const to=document.createElement("span");to.textContent="to";
   to.style.cssText="font-size:.7rem;color:var(--ink-dim)";
   const seasonLab=document.createElement("span");seasonLab.textContent="season";
