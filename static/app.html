@@ -110,7 +110,7 @@
 
   main{padding:1.1rem 1.4rem 3rem}
   .grid-wrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
-  .ghead{display:grid;grid-template-columns:64px repeat(5,1fr)}
+  .ghead{display:grid;grid-template-columns:64px repeat(5,minmax(0,1fr))}
   /* One day, full width. Five things at 3:45 leave each block a fifth of a
      column and there is no layout that fixes that -- so give the day the whole
      grid instead. Click the day heading to go in and out. */
@@ -131,7 +131,7 @@
   .dcell .dname{font-size:.66rem;color:var(--accent);margin-top:.15rem;min-height:.8rem}
   .dcell.today{box-shadow:inset 0 0 0 2px var(--today)}
 
-  .gbody{display:grid;grid-template-columns:64px repeat(5,1fr);position:relative}
+  .gbody{display:grid;grid-template-columns:64px repeat(5,minmax(0,1fr));position:relative}
   .axis{position:relative;border-right:1px solid var(--line)}
   .axis .tick{position:absolute;left:0;right:0;border-top:1px dashed var(--line);font-size:.62rem;color:var(--ink-dim);padding:.05rem .2rem}
   .col{position:relative;border-right:1px solid var(--line)}
@@ -167,9 +167,12 @@
     .lsechd{padding:.45rem .6rem}
   }
   .allday{display:grid;border-bottom:1px solid var(--line)}
-  .allday .adlab{font-size:.6rem;color:var(--ink-dim);padding:.25rem .3rem;text-align:right;
+  /* left-aligned, same size and inset as the hour labels under it */
+  .allday .adlab{font-size:.62rem;color:var(--ink-dim);padding:.25rem .2rem;text-align:left;
                  border-right:1px solid var(--line)}
-  .adcell{padding:.15rem .25rem;border-right:1px solid var(--line);min-height:1.1rem}
+  /* min-width:0 -- a grid item is otherwise at least as wide as its content,
+     and a long nowrap title would widen its whole day column */
+  .adcell{padding:.15rem .25rem;border-right:1px solid var(--line);min-height:1.1rem;min-width:0}
   .adcell:last-child{border-right:0}
   /* One bar, one height. The name only appears on the first day of a run, and
      an unlabelled segment used to collapse to nothing, so the same project
@@ -355,7 +358,7 @@
     button,select,input{padding:.55rem .7rem;font-size:.82rem}
     .arrow{width:2.8rem;height:2.6rem;font-size:1.2rem}
     main{padding:.6rem .5rem 3rem}
-    .ghead,.gbody{grid-template-columns:48px 1fr}
+    .ghead,.gbody{grid-template-columns:48px minmax(0,1fr)}
     .dcell{padding:.5rem .4rem}
     .dcell .dnum{font-size:1.05rem}
     .axis .tick{font-size:.58rem}
@@ -736,6 +739,12 @@ const SAMPLE = location.pathname.startsWith("/sample");
    loud on /local and in the reminder: clear the browser and it is gone, and
    nobody can get it back for you. */
 const LOCAL = location.pathname.startsWith("/local");
+/* A schedule this page can change: the account's, or the one in this
+   browser. The double-click editor checked BACKEND alone, so in local mode
+   adding or editing by double-click said "Log in first" -- ever since local
+   mode existed (its tests drove localApi() directly, never the gesture).
+   Anything that edits asks this, not BACKEND. */
+const EDITABLE = BACKEND || LOCAL;
 const LS_KEY = "ssa-local-schedule";
 function localText(){
   try{ return localStorage.getItem(LS_KEY) || ""; }catch(e){ return ""; }
@@ -1516,6 +1525,22 @@ function retimeOf(k){
   return (n&&STU.special&&STU.special[n])?n:null;
 }
 
+/* A final is drawn in its subject's colour -- the colour of the student's own
+   class in that department if they have one (History = their history class),
+   else Shady Side's department colour (the one a PDF import uses). Every final
+   used to be the same pink. Department of a class = its course-number prefix. */
+const FINAL_DEPTS=[
+  ["Computer Science",/^CS/i,"orange"], ["World Language",/^(FR|SP|LA|CN|ZH|GE|JA|IT)/i,"purple"],
+  ["Tech",/^(TD|EG|DE)/i,"orange"], ["History",/^HI/i,"yellow"], ["English",/^EN/i,"blue"],
+  ["Math",/^MA/i,"red"], ["Science",/^(BI|CH|PH|SC|ES|AS)/i,"green"], ["Art",/^AR/i,"cyan"],
+  ["Music",/^MU/i,"teal"]];
+function finalColor(label,T){
+  const dep=FINAL_DEPTS.find(([name])=>String(label||"").toLowerCase().startsWith(name.toLowerCase()));
+  if(!dep)return "#ff9ad2";
+  const cls=Object.values((T&&T.classes)||{}).find(c=>c&&c.num&&dep[1].test(c.num)&&c.name!=="Unscheduled");
+  const c=(cls&&cls.color)||dep[2];
+  return COLOR_MAP[c]||c;
+}
 function daySpecs(d){
   const k=dkey(d), info=DAYMAP[k];
   const DN3=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
@@ -1530,7 +1555,7 @@ function daySpecs(d){
       const g=b.grades.toUpperCase();
       const mine = g==="ALL" || g.split(",").map(x=>x.trim()).includes(String(STU.grade));
       if(!mine)return;
-      push({kind:"final",color:"#ff9ad2",start:toMin(b.start),end:toMin(b.end),name:b.label,per:"Final Assessment"});
+      push({kind:"final",color:finalColor(b.label,T),start:toMin(b.start),end:toMin(b.end),name:b.label,per:"Final Assessment"});
     });
   } else if(info&&info.type==="special"&&STU.special&&STU.special[info.name]){
     /* Convocation-style day: a fixed list of slots from the shared config.
@@ -2167,7 +2192,7 @@ function render(){
   const one=narrow||ZOOM;                 // a phone, or a day opened on purpose
   const first=one?clampFocus():0, count=one?1:DAY_COUNT();
   ghead.style.gridTemplateColumns = gbody.style.gridTemplateColumns =
-    (narrow||ZOOM) ? "" : `64px repeat(${DAY_COUNT()},1fr)`;
+    (narrow||ZOOM) ? "" : `64px repeat(${DAY_COUNT()},minmax(0,1fr))`;
   ghead.classList.toggle("zoom", !narrow&&ZOOM);
   gbody.classList.toggle("zoom", !narrow&&ZOOM);
   for(let i=first;i<first+count;i++){
@@ -2254,7 +2279,11 @@ function render(){
          media query narrows the axis column too. Using 48px for the zoomed
          desktop day as well pushed the band 16px left of its own column and
          over the label. */
-      ad.style.gridTemplateColumns=narrow?"48px 1fr":`64px repeat(${count},1fr)`;
+      /* minmax(0,1fr), the same as the grid below: plain 1fr means
+         minmax(auto,1fr), and one long all-day title ("Case Western EA
+         decision (~12/19) - check email/portal") widened its own column and
+         pushed every pill after it off its day. */
+      ad.style.gridTemplateColumns=narrow?"48px minmax(0,1fr)":`64px repeat(${count},minmax(0,1fr))`;
       const lab=document.createElement("div");lab.className="adlab";
       lab.textContent=anyDay?"all day":"projects";
       lab.title="All-day events, and projects that have something due this "
@@ -3892,7 +3921,8 @@ function parseHwSrc(src){
    just added meant opening the whole edit form. Now the gesture opens this,
    and Delete is a button inside it. */
 function openEdit(kind,src){
-  if(!BACKEND||!STU){setStatus("Log in first.");return;}
+  if(!EDITABLE){setStatus("Log in first.");return;}
+  if(!STU){setStatus("Add your schedule first, in Edit my schedule.");return;}
   const parsed = kind==="hw" ? parseHwSrc(src) : parseEventSrc(src);
   if(!parsed){setStatus("That line was hand-written; edit it in Edit my schedule.");return;}
   QCTX={kind:kind,edit:true,src:src,shape:parsed};
@@ -3969,8 +3999,13 @@ function noteFor(kind,src){
   const it=list.find(x=>x.src===src);
   return (it&&it.note)||"";
 }
+/* " - " is the field separator in every line, so a name containing it
+   ("Case Western - check email") split into the wrong fields and the item
+   vanished on the next load. Typed names get an en dash instead. The same
+   rule is in edit.html (lineName). */
+const lineName=n=>String(n||"").replace(/\s+-\s+/g," \u2013 ").trim();
 function editedLine(){
-  const name=document.getElementById("qName").value.trim();
+  const name=lineName(document.getElementById("qName").value);
   if(!name)return null;
   const sh=QCTX.shape;
   if(QCTX.kind==="hw"){
@@ -4008,7 +4043,8 @@ function eventLineFromFields(name){
 }
 
 function openQuick(ctx){
-  if(!BACKEND||!STU){setStatus("Log in and add your schedule first.");return;}
+  if(!EDITABLE){setStatus("Log in and add your schedule first.");return;}
+  if(!STU){setStatus("Add your schedule first, in Edit my schedule.");return;}
   QCTX=ctx;
   const hw=ctx.kind==="hw";
   document.getElementById("qNote").value="";
@@ -4050,7 +4086,7 @@ function openQuick(ctx){
   setTimeout(()=>document.getElementById("qName").focus(),30);
 }
 function quickLine(){
-  const name=document.getElementById("qName").value.trim();
+  const name=lineName(document.getElementById("qName").value);
   if(!name)return null;
   if(QCTX.kind==="hw")
     return `${QCTX.period} - ${document.getElementById("qWhen").value} - ${name} - ${QCTX.dateKey}`;
@@ -4315,6 +4351,7 @@ function openItemMenu(el,ev){
     ? (el.textContent||"").replace(/^[✓✎●]\s*/,"").replace(/^(due|in class):\s*/,"")
     : (el.dataset.name||(el.querySelector(".bname")||{}).textContent||"this");
   const m=document.createElement("div");m.className="hwmenu";
+  m.dataset.src=src; m.dataset.kind=kind;
   m.innerHTML=`<div class="ttl">${esc(name)}</div>`;
   const note=noteFor(kind,src);
   if(note){const nd=document.createElement("div");nd.className="mnote";nd.textContent=note;m.appendChild(nd);}
@@ -4350,6 +4387,19 @@ addEventListener("click",e=>{
   if(!e.target.closest(".hwmenu"))closeHwMenu();
 },true);
 addEventListener("keydown",e=>{if(e.key==="Escape")closeHwMenu();});
+/* The first click of a double-click opens the menu, under the pointer when
+   the item is near the bottom or right edge (the menu is nudged to stay on
+   screen) -- so the second click, and the dblclick, landed on the MENU and
+   the editor never opened. A double-click on the menu means the same thing
+   as one on its item. */
+addEventListener("dblclick",e=>{
+  const m=e.target.closest(".hwmenu");
+  if(!m||!m.dataset.src)return;
+  e.stopPropagation(); e.preventDefault();
+  const kind=m.dataset.kind, src=m.dataset.src;
+  closeHwMenu();
+  openEdit(kind,src);
+},true);
 
 /* Tap to expand on a phone (no hover there). A second tap closes it again;
    the double-click shortcuts still work on top of this. */
@@ -4503,7 +4553,7 @@ document.querySelectorAll("#fmtSeg button").forEach(b=>b.onclick=async()=>{
   const want=(b.dataset.f==="12h");
   if(want===IS12)return;
   IS12=want;syncFmtSeg();fillQTimes();render();tickClock();
-  if(!STU||!(BACKEND||LOCAL))return;
+  if(!STU||!EDITABLE)return;
   const v=IS12?"12h":"24h";
   const {body}=await api("/api/pref",{key:"time_format",value:v});
   if(body&&body.ok){STU.pref=STU.pref||{};STU.pref.time_format=v;}

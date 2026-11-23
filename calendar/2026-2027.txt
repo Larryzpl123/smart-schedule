@@ -39,7 +39,9 @@
 11.24-11.27 "Thanksgiving Break" noclass
 11.30-12.04
 12.07-12.11
-12.14-12.18
+12.14-12.16
+12.17-12.17 "Final Assessments" finals
+12.18-12.18 "Final Assessments" finals
 12.21-01.03 "Winter Recess" noclass
 01.04-01.08
 01.11-01.15

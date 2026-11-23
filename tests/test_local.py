@@ -472,6 +472,10 @@ try:
             }""")
         cal_req = []
         p6 = ctx.new_page()
+        # A fixed, ordinary school week. With the real date this check went red
+        # on its own over Thanksgiving: a week with no school days has no cycle
+        # days to compare ("0 days").
+        p6.clock.install(time="2026-09-15T14:00:00Z")
         p6.on("request", lambda r: cal_req.append(r.url)
               if "/calendar" in r.url else None)
         loc = cycles(p6, "/local/app")
@@ -482,6 +486,7 @@ try:
            f"and not a relative path that 404s under /local ({cal_req})")
 
         sp = ctx.new_page()
+        sp.clock.install(time="2026-09-15T14:00:00Z")
         sam_req = []
         sp.on("request", lambda r: sam_req.append(r.url)
               if "/calendar" in r.url else None)

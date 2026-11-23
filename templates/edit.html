@@ -521,6 +521,9 @@ function mkSel(opts,val,w){
   el.style.cssText="font-size:.74rem;padding:.35rem;width:auto"+(w?";min-width:"+w:"");
   return el;
 }
+/* " - " separates the fields of a line, so a typed name containing it split
+   into the wrong fields. Same rule as lineName() in app.html. */
+const lineName=n=>String(n||"").replace(/\s+-\s+/g," \u2013 ").trim();
 function mkInput(val,ph,flex){
   const el=document.createElement("input");
   el.autocomplete="off";
@@ -689,7 +692,7 @@ function eventRow(line){
 function eventRowToText(wrap){
   if(wrap.classList.contains("raw"))return (wrap.querySelector("input").value||"").trim();
   const q=c=>wrap.querySelector(c);
-  const name=(q(".ev_name").value||"").trim();
+  const name=lineName(q(".ev_name").value);
   if(!name)return "";
   const mode=q(".ev_mode").value;
   let when="";
@@ -788,7 +791,7 @@ function sportRow(line){
 function sportRowToText(wrap){
   if(wrap.classList.contains("raw"))return (wrap.querySelector("input").value||"").trim();
   const q=c=>wrap.querySelector(c);
-  const name=(q(".sp_name").value||"").trim();
+  const name=lineName(q(".sp_name").value);
   const dows=Array.from(wrap.querySelectorAll(".sp_dow")).filter(c=>c.checked).map(c=>c.value);
   if(!name||!dows.length)return "";
   const from=dateToMmdd(q(".sp_from").value), to=dateToMmdd(q(".sp_to").value);
@@ -842,7 +845,7 @@ function projRow(line){
 function projRowToText(wrap){
   if(wrap.classList.contains("raw"))return (wrap.querySelector("input").value||"").trim();
   const q=c=>wrap.querySelector(c);
-  const name=(q(".pr_name").value||"").trim();
+  const name=lineName(q(".pr_name").value);
   const from=q(".pr_from").value, to=q(".pr_to").value;
   if(!name||!from||!to)return "";
   return `${name} - ${from} - ${to} - ${q(".pr_color").value}`;
@@ -917,10 +920,10 @@ function hwRow(line){
 function hwRowToText(wrap){
   if(wrap.classList.contains("raw"))return (wrap.querySelector("input").value||"").trim();
   const q=c=>wrap.querySelector(c);
-  const name=(q(".hw_name").value||"").trim(), date=q(".hw_date").value;
+  const name=lineName(q(".hw_name").value), date=q(".hw_date").value;
   if(!name||!date)return "";
   let out=`${q(".hw_per").value} - ${q(".hw_when").value} - ${name} - ${date}`;
-  const proj=(q(".hw_proj")||{}).value||"";
+  const proj=lineName((q(".hw_proj")||{}).value||"");   // a project named with " - " is saved with an en dash
   const done=(q(".hw_done")||{}).checked;
   // "done" alone still has to be distinguishable from a project called "done",
   // so a ticked item with no project writes an empty project field.
