@@ -100,6 +100,14 @@
   .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;padding:.8rem 1.4rem;border-bottom:1px solid var(--line)}
   .nav{display:flex;align-items:center;gap:.5rem}
   button,select,input,textarea{font-family:inherit;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.45rem .7rem;font-size:.8rem;cursor:pointer;transition:.15s}
+  /* The browser's own dropdown arrow sits jammed against the right edge
+     (the year picker looked lopsided). Draw our own, inset like the text on
+     the left, in the theme's dim ink. */
+  select{-webkit-appearance:none;appearance:none;padding-right:2rem;
+    background-image:var(--chev);background-repeat:no-repeat;
+    background-position:right .7rem center;background-size:.7rem}
+  :root{--chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238b95a7' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
+  :root[data-theme="light"]{--chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%2368717e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
   button:hover,select:hover{border-color:var(--accent);color:var(--accent)}
   .arrow{font-size:1rem;width:2.4rem;height:2.2rem;display:grid;place-items:center}
   .wklabel{min-width:14rem;text-align:center;color:var(--ink-dim);font-size:.82rem}
@@ -356,6 +364,7 @@
     .wklabel{min-width:auto;font-size:.74rem;flex:1;text-align:center}
     .spacer{display:none}
     button,select,input{padding:.55rem .7rem;font-size:.82rem}
+    select{padding-right:2rem}          /* room for the chevron, as above */
     .arrow{width:2.8rem;height:2.6rem;font-size:1.2rem}
     main{padding:.6rem .5rem 3rem}
     .ghead,.gbody{grid-template-columns:48px minmax(0,1fr)}
