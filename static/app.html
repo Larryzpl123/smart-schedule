@@ -15,7 +15,20 @@
     if(m) m.href="/manifest-local.webmanifest";
   }
 }catch(e){}})();
+/* Also before the body: this file is ~245KB and arrives in pieces, and the
+   browser paints the toolbar as soon as it has it -- long before the main
+   script further down exists. So the theme and the compact toolbar go on
+   <html> here, and the toolbar stays invisible ("ssa-booting", space kept,
+   nothing shifts) until init() has set every switch to the saved state.
+   Without this, 7-day users saw "5 day" (the markup's default) for a moment
+   on about a third of refreshes. The timer is a safety net: a script error
+   must never leave the toolbar hidden. */
+(function(){var r=document.documentElement;r.classList.add("ssa-booting");
+  try{if(localStorage.getItem("ssa-theme")==="light")r.setAttribute("data-theme","light");
+      if(localStorage.getItem("ssa-toolbar")==="compact")r.classList.add("tb-compact");}catch(e){}
+  setTimeout(function(){r.classList.remove("ssa-booting");},4000);})();
 </script>
+<style>html.ssa-booting .toolbar{visibility:hidden}</style>
 <meta name="theme-color" content="#0d0f14" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2829,6 +2842,9 @@ async function init(){
     if(LOCAL||SAMPLE||BACKEND) nav0.style.display="flex";
   }
   tickClock();setInterval(tickClock,1000);
+  /* every switch is set now (days/view at load, year and 12h/24h just above):
+     show the toolbar, in the same frame as the links and the clock */
+  document.documentElement.classList.remove("ssa-booting");
 
   // preload school defs
   if(!SCHOOL){const sr=await tryFetch(PATHS.shared, EMBED.school);SCHOOL=parseStudent(sr.text);}
