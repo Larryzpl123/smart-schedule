@@ -2725,13 +2725,24 @@ function mergeSchool(){
   STU.special=SCHOOL.special||{};
   STU.retime=SCHOOL.retime||{};
   applyPrefColors();
+  /* no @pref = 12h, the default -- so undo FMT_SEEN's load-time guess (only
+     that: a 24h picked with the switch but not saved stays on screen) */
+  if(!STU.pref.time_format&&FMT_GUESSED){IS12=true;syncFmtSeg();}
+  FMT_GUESSED=false;
   if(STU.pref.time_format){IS12=STU.pref.time_format!=="24h";syncFmtSeg();
     /* mergeSchool() runs after the dialog's dropdowns are built, so relabel
        them here too -- otherwise a student whose schedule says 12h still gets
        a 24-hour list in the popup. */
     if(document.getElementById("qStart"))fillQTimes();}
 }
-function syncFmtSeg(){document.querySelectorAll("#fmtSeg button").forEach(b=>b.classList.toggle("on",(b.dataset.f==="12h")===IS12));}
+/* FMT_SEEN: the format this browser last showed, so the clock (which goes up
+   before the schedule and its @pref have loaded) starts in the right one
+   instead of flipping 12h -> 24h a moment later. A hint only; @pref wins. */
+const FMT_SEEN="ssa-fmt-seen";
+let FMT_GUESSED=false;
+function syncFmtSeg(){document.querySelectorAll("#fmtSeg button").forEach(b=>b.classList.toggle("on",(b.dataset.f==="12h")===IS12));
+  try{localStorage.setItem(FMT_SEEN,IS12?"12h":"24h");}catch(e){}
+  if(document.getElementById("cTime").textContent)tickClock();}   /* redraw now, not at the next tick */
 
 function pickDefaultWeek(){
   const t=pittNow(), todayKey=dkey(t), dow=t.getDay();
@@ -2802,6 +2813,22 @@ function sampleWeekDates(text){
 async function init(){
   const yearSel=document.getElementById("yearSel");
   YEARS.forEach(y=>{const o=document.createElement("option");o.value=y.id;o.textContent=y.label;yearSel.appendChild(o);});
+  /* Everything the header and toolbar can show without waiting for the
+     network goes up HERE, before the first await, so it lands in one frame.
+     The year used to be set after the school file loaded (the box showed its
+     first option, 2025-26, until then), the account links after the calendar,
+     and the clock after the student's own schedule -- three separate jumps. */
+  yearSel.value=(yearForDate(pittNow())||YEARS[0]).id;
+  try{if(localStorage.getItem(FMT_SEEN)==="24h"){IS12=false;FMT_GUESSED=true;syncFmtSeg();}}catch(e){}
+  const nav0=document.getElementById("acctNav");
+  if(nav0){
+    if(LOCAL) nav0.innerHTML='<a href="/local/edit" style="color:#8b95a7;text-decoration:none">Edit my schedule</a>'
+      +'<a href="/local" style="color:#8b95a7;text-decoration:none">About local mode</a>';
+    else if(SAMPLE) nav0.innerHTML='<a href="/login" style="color:#8b95a7;text-decoration:none">Log in</a>'
+      +'<a href="/register" style="color:#8b95a7;text-decoration:none">Sign up</a>';
+    if(LOCAL||SAMPLE||BACKEND) nav0.style.display="flex";
+  }
+  tickClock();setInterval(tickClock,1000);
 
   // preload school defs
   if(!SCHOOL){const sr=await tryFetch(PATHS.shared, EMBED.school);SCHOOL=parseStudent(sr.text);}
@@ -2830,14 +2857,9 @@ async function init(){
     warmOffline();
     const t=localText();
     if(t.trim().length>3){ STU=parseStudent(t); mergeSchool(); }
-    const nav=document.getElementById("acctNav");
-    if(nav){ nav.style.display="flex";
-      nav.innerHTML='<a href="/local/edit" style="color:#8b95a7;text-decoration:none">Edit my schedule</a>'
-        +'<a href="/local" style="color:#8b95a7;text-decoration:none">About local mode</a>'; }
   }
   // In backend mode, auto-load the logged-in user's own schedule.
   if(BACKEND){
-    const nav=document.getElementById("acctNav"); if(nav)nav.style.display="flex";
     try{const mr=await fetch("/api/me",{cache:"no-store"});if(mr.ok){const me=await mr.json();ME_EMAIL=me.email||"";if(me.is_admin){const al=document.getElementById("adminLink");if(al)al.style.display="inline";}}}catch(e){}
     await acctOfflineOwnerCheck();
     try{
@@ -2875,9 +2897,6 @@ async function init(){
       +'text-decoration:none">No account? Local mode</a>'
       +'<a href="/register" style="color:var(--accent)">Make it yours →</a>';
     document.querySelector(".toolbar").after(bar);
-    const nav=document.getElementById("acctNav");
-    if(nav){nav.style.display="flex";nav.innerHTML='<a href="/login" style="color:#8b95a7;text-decoration:none">Log in</a>'
-      +'<a href="/register" style="color:#8b95a7;text-decoration:none">Sign up</a>';}
   }
   if(LOCAL&&!STU){
     const bar=document.createElement("div");
@@ -2904,7 +2923,6 @@ async function init(){
   render();
   wireLocalUI();
   maybeRemind();
-  tickClock();setInterval(tickClock,1000);
   setInterval(updateNowBar,60000);
   document.addEventListener("visibilitychange",()=>{if(!document.hidden)updateNowBar();});
   window.addEventListener("focus",updateNowBar);
