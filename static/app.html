@@ -28,7 +28,11 @@
       if(localStorage.getItem("ssa-toolbar")==="compact")r.classList.add("tb-compact");}catch(e){}
   setTimeout(function(){r.classList.remove("ssa-booting");},4000);})();
 </script>
-<style>html.ssa-booting .toolbar{visibility:hidden}</style>
+<!-- and no transitions while booting: buttons fade colour over .15s, so the
+     switch from the markup's "5 day" to the saved "7 day" played as a visible
+     fade the moment the toolbar was shown (Larry's screen recording). -->
+<style>html.ssa-booting .toolbar{visibility:hidden}
+html.ssa-booting *,html.ssa-booting *::before,html.ssa-booting *::after{transition:none!important}</style>
 <meta name="theme-color" content="#0d0f14" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2844,6 +2848,9 @@ async function init(){
   tickClock();setInterval(tickClock,1000);
   /* every switch is set now (days/view at load, year and 12h/24h just above):
      show the toolbar, in the same frame as the links and the clock */
+  /* flush styles first: without it the browser compares against the style
+     it had BEFORE the switches moved, with transitions back on, and fades */
+  void document.body.offsetWidth;
   document.documentElement.classList.remove("ssa-booting");
 
   // preload school defs

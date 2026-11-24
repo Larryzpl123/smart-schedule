@@ -65,7 +65,9 @@ SAMPLER = """(() => { window.__fr = []; const snap = () => {
   if (tb && ds && document.body) window.__fr.push({shown: getComputedStyle(tb).visibility !== 'hidden',
       days: on('#daysSeg'), view: on('#viewSeg'), theme: document.documentElement.getAttribute('data-theme'),
       compact: document.documentElement.classList.contains('tb-compact'),
-      bg: getComputedStyle(document.body).backgroundColor});
+      bg: getComputedStyle(document.body).backgroundColor,
+      b5: getComputedStyle(document.querySelector('#daysSeg button[data-d="5"]')).backgroundColor,
+      b7: getComputedStyle(document.querySelector('#daysSeg button[data-d="7"]')).backgroundColor});
   if (window.__fr.length < 600) requestAnimationFrame(snap); };
   requestAnimationFrame(snap); })();"""
 
@@ -96,6 +98,12 @@ try:
             bad = [f for f in shown if f["days"] != "7 day" or f["view"] != "Week" or f["compact"] != compact]
             ck(shown and not bad, f"{tag}: whenever the toolbar is visible it says 7 day / Week "
                                   f"({len(bad)} of {len(shown)} visible frames wrong{', e.g. ' + str(bad[0]) if bad else ''})")
+            # what is actually painted, not just the class: the buttons fade
+            # colour over .15s, and that fade from "5 day" played on screen
+            fin = fr[-1]
+            fade = [f for f in shown if (f["b5"], f["b7"]) != (fin["b5"], fin["b7"])]
+            ck(not fade, f"{tag}: and its colours are already final -- no fade from 5 day to 7 day "
+                         f"({len(fade)} visible frames mid-fade{', e.g. ' + str((fade[0]['b5'], fade[0]['b7'])) if fade else ''})")
             dark = [f for f in fr if f["theme"] != "light"]
             ck(not dark, f"{tag}: light theme from the first frame ({len(dark)} frames without it)")
             ck(fr and fr[-1]["shown"], f"{tag}: and the toolbar is visible once loaded")
